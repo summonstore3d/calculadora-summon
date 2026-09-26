@@ -47,9 +47,40 @@ test("produção aceita consumo real e usa o apontamento no estoque",()=>{
   assert.equal(next.productionOrders[0].actualConsumption[0].weightGrams,230);
 });
 
-test("pedido só avança por transições permitidas",()=>{
+test("aprovação sem estoque cria produção vinculada",()=>{
   let state:AppState={...fixture(),orders:[{id:"o1",number:"PV-1",customerName:"Cliente",channel:"direct",seller:"",items:[],status:"orcamento",discount:0,fees:0,taxes:0,shippingCharged:0,shippingPaid:0,advertisingCost:0,otherCosts:0,paymentMethod:"",paymentStatus:"pendente",origin:"",addressSnapshot:"",note:"",gross:0,netRevenue:0,cost:0,profit:0,margin:0,stockApplied:false,createdAt:"2026-01-02T00:00:00Z"}]};
+  state.orders[0].items=[{id:"i1",productId:"p1",productName:"Peça",productSku:"P1",category:"Teste",universe:"",quantity:1,unitPrice:100,discount:0,revenue:100,cost:0,fees:0,taxes:0,adsAllocated:0,otherAllocated:0,profit:0,margin:0,lotAllocations:[]}];
   state=transitionOrder(state,"o1","aprovado");
-  assert.equal(state.orders[0].status,"aprovado");
+  assert.equal(state.orders[0].status,"producao");
+  const linked=state.productionOrders.find(p=>p.salesOrderId==="o1");
+  assert.equal(linked?.plannedQuantity,1);
+  assert.deepEqual(state.orders[0].productionOrderIds,[linked?.id]);
   assert.throws(()=>transitionOrder(state,"o1","concluido"));
+});
+
+test("aprovação com estoque separa por FIFO sem descontar novamente na venda",()=>{
+  let state=buildProduction(fixture(),"op1",{approved:2,lost:0,hours:4,lossReason:"",note:""});
+  state={...state,orders:[{id:"o1",number:"PV-1",customerName:"Cliente",channel:"direct",seller:"",items:[{id:"i1",productId:"p1",productName:"Peça",productSku:"P1",category:"Teste",universe:"",quantity:1,unitPrice:100,discount:0,revenue:100,cost:0,fees:0,taxes:0,adsAllocated:0,otherAllocated:0,profit:0,margin:0,lotAllocations:[]}],status:"orcamento",discount:0,fees:0,taxes:0,shippingCharged:0,shippingPaid:0,advertisingCost:0,otherCosts:0,paymentMethod:"",paymentStatus:"pendente",origin:"",addressSnapshot:"",note:"",gross:100,netRevenue:100,cost:0,profit:0,margin:0,stockApplied:false,createdAt:"2026-01-02T00:00:00Z"}]};
+  state=transitionOrder(state,"o1","aprovado");
+  assert.equal(state.orders[0].status,"pronto");
+  assert.equal(state.orders[0].stockAllocated,true);
+  assert.equal(state.products[0].readyStock,1);
+  assert.equal(state.lots[0].balance,1);
+  const sold=completeSale(state,"o1",0);
+  assert.equal(sold.products[0].readyStock,1);
+  assert.equal(sold.lots[0].balance,1);
+});
+
+test("produção vinculada deixa o pedido pronto e cancelamento devolve estoque",()=>{
+  let state:AppState={...fixture(),productionOrders:[],orders:[{id:"o1",number:"PV-1",customerName:"Cliente",channel:"direct",seller:"",items:[{id:"i1",productId:"p1",productName:"Peça",productSku:"P1",category:"Teste",universe:"",quantity:1,unitPrice:100,discount:0,revenue:100,cost:0,fees:0,taxes:0,adsAllocated:0,otherAllocated:0,profit:0,margin:0,lotAllocations:[]}],status:"orcamento",discount:0,fees:0,taxes:0,shippingCharged:0,shippingPaid:0,advertisingCost:0,otherCosts:0,paymentMethod:"",paymentStatus:"pendente",origin:"",addressSnapshot:"",note:"",gross:100,netRevenue:100,cost:0,profit:0,margin:0,stockApplied:false,createdAt:"2026-01-02T00:00:00Z"}]};
+  state=transitionOrder(state,"o1","aprovado");
+  const productionId=state.orders[0].productionOrderIds![0];
+  state=buildProduction(state,productionId,{approved:1,lost:0,hours:2,lossReason:"",note:""});
+  assert.equal(state.orders[0].status,"pronto");
+  assert.equal(state.orders[0].stockAllocated,true);
+  assert.equal(state.products[0].readyStock,0);
+  state=transitionOrder(state,"o1","cancelado");
+  assert.equal(state.products[0].readyStock,1);
+  assert.equal(state.lots[0].balance,1);
+  assert.equal(state.orders[0].stockAllocated,false);
 });
