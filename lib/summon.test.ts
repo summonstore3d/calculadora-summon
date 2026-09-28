@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,returnSale,transitionOrder,type AppState} from "./summon.ts";
+import {buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,returnSale,transitionOrder,updateDraftOrder,type AppState} from "./summon.ts";
 
 const snapshot=calculateCost({parts:[{materialId:"m1",name:"PLA azul",weightGrams:100,costPerKg:100}],hours:2,manualHours:.5,wastePercent:10,failurePercent:5,other:2,unitsPerPrint:1},defaults);
 
@@ -69,7 +69,20 @@ test("aprovação sem estoque cria produção vinculada",()=>{
   const linked=state.productionOrders.find(p=>p.salesOrderId==="o1");
   assert.equal(linked?.plannedQuantity,1);
   assert.deepEqual(state.orders[0].productionOrderIds,[linked?.id]);
+  assert.equal(state.orders[0].history?.at(-1)?.status,"producao");
   assert.throws(()=>transitionOrder(state,"o1","concluido"));
+});
+
+test("orçamento pode ser editado com recálculo e histórico",()=>{
+  let state:AppState={...fixture(),orders:[{id:"o1",number:"PV-1",customerName:"Cliente",channel:"direct",seller:"",items:[{id:"i1",productId:"p1",productName:"Peça",productSku:"P1",category:"Teste",universe:"",quantity:1,unitPrice:100,discount:0,revenue:100,cost:0,fees:0,taxes:0,adsAllocated:0,otherAllocated:0,profit:0,margin:0,lotAllocations:[]}],status:"orcamento",discount:0,fees:0,taxes:0,shippingCharged:0,shippingPaid:0,advertisingCost:0,otherCosts:0,paymentMethod:"",paymentStatus:"pendente",origin:"",addressSnapshot:"",note:"",gross:100,netRevenue:100,cost:0,profit:0,margin:0,stockApplied:false,createdAt:"2026-01-02T00:00:00Z"}],payments:[{id:"pay1",orderId:"o1",expected:100,received:0,dueDate:"2026-01-10",method:"",status:"pendente"}]};
+  state=updateDraftOrder(state,"o1",{customerName:"Cliente editado",channel:"shopee",seller:"Ana",discount:10,shippingCharged:5,shippingPaid:8,otherCosts:3,paymentMethod:"Pix",origin:"Instagram",note:"Revisado",items:[{id:"i1",quantity:2,unitPrice:90,discount:4}]});
+  assert.equal(state.orders[0].netRevenue,171);
+  assert.equal(state.orders[0].items[0].revenue,176);
+  assert.equal(state.orders[0].customerName,"Cliente editado");
+  assert.equal(state.orders[0].history?.at(-1)?.note,"Orçamento editado");
+  assert.equal(state.payments[0].expected,171);
+  state=transitionOrder(state,"o1","aprovado");
+  assert.throws(()=>updateDraftOrder(state,"o1",{customerName:"X",channel:"direct",seller:"",discount:0,shippingCharged:0,shippingPaid:0,otherCosts:0,paymentMethod:"",origin:"",note:"",items:[]}));
 });
 
 test("aprovação com estoque separa por FIFO sem descontar novamente na venda",()=>{
