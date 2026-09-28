@@ -14,7 +14,7 @@ export type Machine = { id:string; name:string; model:string; acquisitionValue:n
 export type Maintenance = { id:string; machineId:string; kind:"preventiva"|"corretiva"; cost:number; date:string; machineHours:number; note:string };
 export type ProductionOrder = { id:string; number:string; productId:string; recipeVersionId:string; salesOrderId?:string; plannedQuantity:number; approvedQuantity:number; lostQuantity:number; priority:"baixa"|"normal"|"alta"; dueDate?:string; machineId?:string; status:ProductionStatus; plannedConsumption:MaterialPart[]; actualConsumption:MaterialPart[]; actualHours:number; lossReason:string; note:string; createdAt:string; completedAt?:string; lotId?:string };
 export type ProductLot = { id:string; code:string; productId:string; productionOrderId:string; recipeVersionId:string; machineId?:string; initialQuantity:number; balance:number; unitCost:number; costBreakdown?:{materials:number;energy:number;depreciation:number;labor:number;maintenance:number;other:number;total:number}; producedAt:string; note:string };
-export type Customer = { id:string; name:string; phone:string; email:string; document:string; zip:string; city:string; state:string; address:string; origin:string; campaignId?:string; tags:string[]; note:string; consent:boolean; createdAt:string };
+export type Customer = { id:string; name:string; phone:string; email:string; document:string; zip:string; city:string; state:string; address:string; origin:string; campaignId?:string; tags:string[]; note:string; consent:boolean; status?:"active"|"archived"; createdAt:string };
 export type Campaign = { id:string; name:string; platform:string; startDate:string; endDate:string; investment:number; objective:string; target:string; note:string; status:"active"|"paused"|"finished" };
 export type OrderItem = { id:string; productId:string; productName:string; productSku:string; category:string; universe:string; quantity:number; unitPrice:number; discount:number; revenue:number; cost:number; fees:number; taxes:number; adsAllocated:number; otherAllocated:number; profit:number; margin:number; lotAllocations:{lotId:string;quantity:number;unitCost:number}[] };
 export type OrderHistoryEntry = { id:string; status:OrderStatus; note:string; createdAt:string };
@@ -53,12 +53,51 @@ export function hydrateState(raw:any):AppState{
   const s={...emptyState,...raw,settings:{...defaults,...raw?.settings}} as AppState;
   s.expenses=s.expenses||[];
   s.products=(s.products||[]).map((p:any)=>({...p,description:p.description||"",dimensions:p.dimensions||"",leadDays:Number(p.leadDays)||0,minimumStock:Number(p.minimumStock)||0,activeRecipeId:p.activeRecipeId||"",snapshot:{maintenance:0,unitCost:p.snapshot?.total||0,directMargin:p.snapshot?.directPrice?cents((p.snapshot.directPrice-p.snapshot.total)/p.snapshot.directPrice*100):0,...p.snapshot}}));
+  s.customers=(s.customers||[]).map((c:any)=>({...c,status:c.status||"active"}));
   s.orders=(s.orders||[]).map((o:any)=>{const createdAt=o.createdAt||new Date().toISOString(),status=o.status||"orcamento",history=o.history?.length?o.history:[{id:uid(),status,note:status==="orcamento"?"Pedido criado":"Histórico anterior migrado",createdAt:o.returnedAt||o.completedAt||createdAt}];return{...o,number:o.number||`PV-${String((s.orders||[]).indexOf(o)+1).padStart(4,"0")}`,customerName:o.customerName||o.customer||"Consumidor",items:o.items||[{id:uid(),productId:o.productId,productName:o.productName,productSku:o.productSku,category:o.category||"",universe:o.universe||"",quantity:o.quantity||1,unitPrice:o.quantity?o.gross/o.quantity:o.gross,discount:0,revenue:o.gross,cost:o.cost,fees:o.fees,taxes:o.taxes,adsAllocated:0,otherAllocated:0,profit:o.profit,margin:o.gross?cents(o.profit/o.gross*100):0,lotAllocations:[]}],discount:o.discount||0,shippingCharged:o.shippingCharged||0,shippingPaid:o.shippingPaid||0,advertisingCost:o.advertisingCost||0,otherCosts:o.otherCosts||0,paymentMethod:o.paymentMethod||"",paymentStatus:o.paymentStatus||"pendente",origin:o.origin||"",addressSnapshot:o.addressSnapshot||"",note:o.note||"",netRevenue:o.netRevenue??o.gross,margin:o.margin??(o.gross?cents(o.profit/o.gross*100):0),stockAllocated:Boolean(o.stockAllocated),productionOrderIds:o.productionOrderIds||[],history,createdAt}});
   return s;
 }
 
 export function recipeFor(state:AppState,product:Product){return state.recipes.find(r=>r.id===product.activeRecipeId)||state.recipes.filter(r=>r.productId===product.id).sort((a,b)=>b.version-a.version)[0]}
 export function productStock(state:AppState,productId:string){return state.lots.filter(l=>l.productId===productId).reduce((s,l)=>s+l.balance,0)}
+
+export function updateProduct(state:AppState,productId:string,input:Pick<Product,"name"|"sku"|"description"|"category"|"universe"|"tags"|"dimensions"|"leadDays"|"minimumStock"|"fulfillment"|"status">&{imageUrl?:string}){
+  const product=state.products.find(p=>p.id===productId);if(!product)throw new Error("Produto não encontrado");
+  if(!input.name.trim()||!input.sku.trim()||!input.category.trim())throw new Error("Preencha nome, SKU e categoria");
+  if(state.products.some(p=>p.id!==productId&&normalize(p.sku)===normalize(input.sku)))throw new Error("Já existe um produto com este SKU");
+  return{...state,products:state.products.map(p=>p.id===productId?{...p,...input,imageUrl:input.imageUrl||p.imageUrl,leadDays:Math.max(0,input.leadDays),minimumStock:Math.max(0,input.minimumStock)}:p)};
+}
+
+export function removeProduct(state:AppState,productId:string){
+  const product=state.products.find(p=>p.id===productId);if(!product)throw new Error("Produto não encontrado");
+  const linked=state.orders.some(o=>o.items.some(i=>i.productId===productId))||state.productionOrders.some(o=>o.productId===productId)||state.lots.some(l=>l.productId===productId)||state.movements.some(m=>m.entity==="product"&&m.entityId===productId);
+  if(linked||product.readyStock>0)return{state:{...state,products:state.products.map(p=>p.id===productId?{...p,status:"archived" as const}:p)},archived:true};
+  return{state:{...state,products:state.products.filter(p=>p.id!==productId),recipes:state.recipes.filter(r=>r.productId!==productId)},archived:false};
+}
+
+export function updateCustomer(state:AppState,customerId:string,input:Omit<Customer,"id"|"createdAt">){
+  const customer=state.customers.find(c=>c.id===customerId);if(!customer)throw new Error("Cliente não encontrado");
+  if(!input.name.trim())throw new Error("Informe o nome do cliente");
+  if(state.customers.some(c=>c.id!==customerId&&((input.phone&&normalize(c.phone)===normalize(input.phone))||(input.email&&normalize(c.email)===normalize(input.email)))))throw new Error("Já existe outro cliente com este telefone ou e-mail");
+  return{...state,customers:state.customers.map(c=>c.id===customerId?{...c,...input}:c)};
+}
+
+export function removeCustomer(state:AppState,customerId:string){
+  const customer=state.customers.find(c=>c.id===customerId);if(!customer)throw new Error("Cliente não encontrado");
+  const linked=state.orders.some(o=>o.customerId===customerId);
+  if(linked)return{state:{...state,customers:state.customers.map(c=>c.id===customerId?{...c,status:"archived" as const}:c)},archived:true};
+  return{state:{...state,customers:state.customers.filter(c=>c.id!==customerId)},archived:false};
+}
+
+export function updatePurchase(state:AppState,purchaseId:string,input:{date:string;note:string}){const purchase=state.purchases.find(p=>p.id===purchaseId);if(!purchase)throw new Error("Compra não encontrada");if(purchase.reversedAt)throw new Error("Compras estornadas não podem ser editadas");return{...state,purchases:state.purchases.map(p=>p.id===purchaseId?{...p,date:input.date,note:input.note}:p),movements:state.movements.map(m=>m.referenceId===purchaseId&&m.kind==="purchase"?{...m,note:input.note}:m)}}
+
+export function reversePurchase(state:AppState,purchaseId:string,reason:string){
+  const purchase=state.purchases.find(p=>p.id===purchaseId),material=purchase&&state.materials.find(m=>m.id===purchase.materialId);if(!purchase||!material)throw new Error("Compra ou material não encontrado");if(purchase.reversedAt)throw new Error("Compra já estornada");if(!reason.trim())throw new Error("Informe o motivo do estorno");const grams=cents(purchase.kg*1000);if(material.stockGrams<grams)throw new Error("O estorno deixaria o estoque negativo");const nextStock=cents(material.stockGrams-grams),currentValue=material.stockGrams/1000*material.averageCost,nextValue=Math.max(0,currentValue-purchase.total),nextAverage=nextStock?cents(nextValue/(nextStock/1000)):0,now=new Date().toISOString(),movement:Movement={id:uid(),entity:"material",entityId:material.id,kind:"purchase-reversal",quantity:-grams,balanceAfter:nextStock,referenceId:purchase.id,unitCost:purchase.kg?purchase.total/purchase.kg:0,note:reason,createdAt:now};return{...state,materials:state.materials.map(m=>m.id===material.id?{...m,stockGrams:nextStock,averageCost:nextAverage}:m),purchases:state.purchases.map(p=>p.id===purchaseId?{...p,reversedAt:now,note:p.note?`${p.note} · Estorno: ${reason}`:`Estorno: ${reason}`}:p),movements:[...state.movements,movement]};
+}
+
+export function adjustProductStock(state:AppState,lotId:string,input:{operation:"set"|"add"|"remove";quantity:number;reason:string}){
+  const lot=state.lots.find(l=>l.id===lotId),product=lot&&state.products.find(p=>p.id===lot.productId);if(!lot||!product)throw new Error("Lote ou produto não encontrado");if(!input.reason.trim())throw new Error("Informe o motivo do ajuste");const quantity=Math.max(0,Math.trunc(input.quantity)),next=input.operation==="set"?quantity:input.operation==="add"?lot.balance+quantity:lot.balance-quantity;if(next<0)throw new Error("O ajuste deixaria o lote negativo");const delta=next-lot.balance,readyStock=product.readyStock+delta;if(readyStock<0)throw new Error("O ajuste deixaria o estoque do produto negativo");const movement:Movement={id:uid(),entity:"product",entityId:product.id,kind:"inventory-adjustment",quantity:delta,balanceAfter:readyStock,referenceId:lot.id,unitCost:lot.unitCost,note:input.reason,createdAt:new Date().toISOString()};return{...state,lots:state.lots.map(l=>l.id===lotId?{...l,balance:next,note:l.note?`${l.note} · Ajuste: ${input.reason}`:`Ajuste: ${input.reason}`}:l),products:state.products.map(p=>p.id===product.id?{...p,readyStock}:p),movements:[...state.movements,movement]};
+}
 
 export const orderTransitions:Record<OrderStatus,OrderStatus[]>={
   orcamento:["aprovado","cancelado"],aprovado:["producao","pronto","cancelado"],producao:["pronto","cancelado"],pronto:["enviado","concluido","cancelado"],enviado:["concluido"],concluido:["devolvido"],cancelado:[],devolvido:[]

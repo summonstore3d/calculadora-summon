@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,returnSale,transitionOrder,updateDraftOrder,type AppState} from "./summon.ts";
+import {adjustProductStock,buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,removeCustomer,removeProduct,returnSale,reversePurchase,transitionOrder,updateCustomer,updateDraftOrder,updateProduct,updatePurchase,type AppState} from "./summon.ts";
 
 const snapshot=calculateCost({parts:[{materialId:"m1",name:"PLA azul",weightGrams:100,costPerKg:100}],hours:2,manualHours:.5,wastePercent:10,failurePercent:5,other:2,unitsPerPrint:1},defaults);
 
@@ -110,4 +110,46 @@ test("produção vinculada deixa o pedido pronto e cancelamento devolve estoque"
   assert.equal(state.products[0].readyStock,1);
   assert.equal(state.lots[0].balance,1);
   assert.equal(state.orders[0].stockAllocated,false);
+});
+
+test("catálogo edita dados e arquiva produto com histórico",()=>{
+  let state=fixture();
+  state=updateProduct(state,"p1",{name:"Peça nova",sku:"P2",description:"Descrição",category:"Deckbox",universe:"Pokémon",tags:["TCG"],dimensions:"10 cm",leadDays:3,minimumStock:2,fulfillment:"hybrid",status:"active"});
+  assert.equal(state.products[0].name,"Peça nova");
+  state=buildProduction(state,"op1",{approved:1,lost:0,hours:2,lossReason:"",note:""});
+  const removed=removeProduct(state,"p1");
+  assert.equal(removed.archived,true);
+  assert.equal(removed.state.products[0].status,"archived");
+});
+
+test("cliente sem pedido é excluído e cliente vinculado é arquivado",()=>{
+  const customer={id:"c1",name:"Ana",phone:"1",email:"a@a.com",document:"",zip:"",city:"Porto Alegre",state:"RS",address:"",origin:"Ads",tags:[],note:"",consent:true,status:"active" as const,createdAt:"2026-01-01T00:00:00Z"};
+  let state:AppState={...fixture(),customers:[customer]};
+  state=updateCustomer(state,"c1",{...customer,name:"Ana Maria",status:"active"});
+  assert.equal(state.customers[0].name,"Ana Maria");
+  assert.equal(removeCustomer(state,"c1").state.customers.length,0);
+  state={...state,orders:[{id:"o1",number:"PV-1",customerId:"c1",customerName:"Ana",channel:"direct",seller:"",items:[],status:"orcamento",discount:0,fees:0,taxes:0,shippingCharged:0,shippingPaid:0,advertisingCost:0,otherCosts:0,paymentMethod:"",paymentStatus:"pendente",origin:"",addressSnapshot:"",note:"",gross:0,netRevenue:0,cost:0,profit:0,margin:0,stockApplied:false,createdAt:"2026-01-02T00:00:00Z"}]};
+  const removed=removeCustomer(state,"c1");
+  assert.equal(removed.archived,true);
+  assert.equal(removed.state.customers[0].status,"archived");
+});
+
+test("compra pode editar metadados e estornar com auditoria",()=>{
+  const purchase={id:"buy1",materialId:"m1",kg:.5,subtotal:40,freight:10,total:50,date:"2026-01-01",note:""};
+  let state:AppState={...fixture(),purchases:[purchase]};
+  state=updatePurchase(state,"buy1",{date:"2026-01-02",note:"NF 10"});
+  assert.equal(state.purchases[0].note,"NF 10");
+  state=reversePurchase(state,"buy1","Duplicada");
+  assert.equal(state.materials[0].stockGrams,500);
+  assert.ok(state.purchases[0].reversedAt);
+  assert.equal(state.movements.at(-1)?.kind,"purchase-reversal");
+});
+
+test("inventário de produto ajusta lote, saldo agregado e histórico",()=>{
+  let state=buildProduction(fixture(),"op1",{approved:2,lost:0,hours:4,lossReason:"",note:""});
+  state=adjustProductStock(state,state.lots[0].id,{operation:"remove",quantity:1,reason:"Avaria"});
+  assert.equal(state.lots[0].balance,1);
+  assert.equal(state.products[0].readyStock,1);
+  assert.equal(state.movements.at(-1)?.kind,"inventory-adjustment");
+  assert.throws(()=>adjustProductStock(state,state.lots[0].id,{operation:"remove",quantity:2,reason:"Erro"}));
 });
