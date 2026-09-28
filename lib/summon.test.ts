@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildProduction,calculateCost,completeSale,defaults,emptyState,returnSale,transitionOrder,type AppState} from "./summon.ts";
+import {buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,returnSale,transitionOrder,type AppState} from "./summon.ts";
 
 const snapshot=calculateCost({parts:[{materialId:"m1",name:"PLA azul",weightGrams:100,costPerKg:100}],hours:2,manualHours:.5,wastePercent:10,failurePercent:5,other:2,unitsPerPrint:1},defaults);
 
@@ -26,6 +26,8 @@ test("produção consome material e cria lote com custo histórico",()=>{
   assert.equal(next.lots[0].balance,2);
   assert.equal(next.products[0].readyStock,2);
   assert.equal(next.productionOrders[0].status,"concluida");
+  assert.equal(next.lots[0].costBreakdown?.total,next.lots[0].unitCost*2);
+  assert.equal(next.lots[0].costBreakdown?.materials,20);
 });
 
 test("venda usa FIFO, desconta anúncios e devolução restaura o lote",()=>{
@@ -36,9 +38,21 @@ test("venda usa FIFO, desconta anúncios e devolução restaura o lote",()=>{
   assert.equal(sold.products[0].readyStock,1);
   assert.equal(sold.orders[0].items[0].adsAllocated,20);
   assert.ok(sold.orders[0].profit<80);
+  const result=financialBreakdown(sold.orders[0]);
+  assert.equal(result.calculatedProfit,sold.orders[0].profit);
+  assert.equal(result.difference,0);
   const returned=returnSale(sold,"o1");
   assert.equal(returned.lots[0].balance,2);
   assert.equal(returned.products[0].readyStock,2);
+});
+
+test("composição financeira identifica prejuízo e custos anormais",()=>{
+  const order={...emptyState.orders[0],id:"o-loss",number:"PV-LOSS",customerName:"Cliente",channel:"direct" as const,seller:"",items:[],status:"concluido" as const,discount:0,fees:5,taxes:3,shippingCharged:0,shippingPaid:20,advertisingCost:40,otherCosts:1500,paymentMethod:"",paymentStatus:"pendente" as const,origin:"",addressSnapshot:"",note:"",gross:100,netRevenue:100,cost:25,profit:-1493,margin:-1493,stockApplied:true,createdAt:"2026-01-02T00:00:00Z"};
+  const result=financialBreakdown(order);
+  assert.equal(result.calculatedProfit,-1493);
+  assert.equal(result.margin,-1493);
+  assert.ok(result.anomalies.some(message=>message.includes("prejuízo")));
+  assert.ok(result.anomalies.some(message=>message.includes("Outros custos")));
 });
 
 test("produção aceita consumo real e usa o apontamento no estoque",()=>{
