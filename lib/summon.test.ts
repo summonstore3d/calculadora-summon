@@ -1,8 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {pageFromPath,pathForPage,pathForRecord,recordFromPath} from "./navigation.ts";
 import {adjustProductStock,buildProduction,calculateCost,completeSale,defaults,emptyState,financialBreakdown,removeCustomer,removeProduct,returnSale,reversePurchase,transitionOrder,updateCustomer,updateDraftOrder,updateProduct,updatePurchase,type AppState} from "./summon.ts";
 
 const snapshot=calculateCost({parts:[{materialId:"m1",name:"PLA azul",weightGrams:100,costPerKg:100}],hours:2,manualHours:.5,wastePercent:10,failurePercent:5,other:2,unitsPerPrint:1},defaults);
+
+test("navegação converte páginas e registros em URLs estáveis",()=>{
+  assert.equal(pathForPage("orders"),"/pedidos");
+  assert.equal(pageFromPath("/pedidos/PV-00001"),"orders");
+  assert.equal(pathForRecord("catalog","PRD 001"),"/catalogo/PRD%20001");
+  assert.equal(recordFromPath("/catalogo/PRD%20001"),"PRD 001");
+  assert.equal(pageFromPath("/rota-inexistente"),undefined);
+});
 
 test("precificação considera todos os centros de custo e preserva margem",()=>{
   assert.equal(snapshot.material,11);
