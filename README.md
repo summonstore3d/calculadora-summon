@@ -2,6 +2,15 @@
 
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
 
+## Persistência da aplicação
+
+A operação usa registros separados por domínio: materiais, compras, produtos, fichas técnicas, produção, lotes, clientes, pedidos, itens, pagamentos, despesas e cálculos. O antigo `app_states` permanece somente como fonte de migração e cópia histórica; ele deixa de ser regravado depois que o usuário é migrado.
+
+- No Sites/Cloudflare, o sistema usa o binding D1 `DB` e as migrações versionadas em `drizzle/`.
+- Na Vercel, configure `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` com os valores de um banco libSQL/Turso. As tabelas portáteis são preparadas automaticamente na primeira conexão.
+- Sem essas variáveis na Vercel, a aplicação mantém o modo local do navegador para não impedir o acesso, mas os dados não são compartilhados entre dispositivos.
+- Toda gravação usa versão otimista, token de transação e auditoria, evitando que duas sessões sobrescrevam silenciosamente a mesma operação.
+
 ## Prerequisites
 
 - Node.js `>=22.13.0`
