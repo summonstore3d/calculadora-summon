@@ -9,7 +9,19 @@ A operação usa registros separados por domínio: materiais, compras, produtos,
 - No Sites/Cloudflare, o sistema usa o binding D1 `DB` e as migrações versionadas em `drizzle/`.
 - Na Vercel, configure `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` com os valores de um banco libSQL/Turso. As tabelas portáteis são preparadas automaticamente na primeira conexão.
 - Sem essas variáveis na Vercel, a aplicação mantém o modo local do navegador para não impedir o acesso, mas os dados não são compartilhados entre dispositivos.
+- Quando um banco vazio é conectado pela primeira vez, a aplicação detecta os dados existentes no navegador e os transfere automaticamente para o banco. Uma cópia local de recuperação também é mantida após cada gravação remota bem-sucedida.
+- A interface sempre informa `Banco permanente` ou `Somente neste navegador`, evitando iniciar a operação definitiva sem persistência externa.
 - Toda gravação usa versão otimista, token de transação e auditoria, evitando que duas sessões sobrescrevam silenciosamente a mesma operação.
+
+### Configuração permanente na Vercel
+
+1. Crie um banco no Turso e obtenha a URL e o token de autenticação.
+2. Na Vercel, abra o projeto em **Settings → Environment Variables**.
+3. Cadastre `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` em **Production** e **Preview**.
+4. Faça um novo deploy. O primeiro acesso no navegador que contém os dados atuais fará a migração automática.
+5. Confirme no topo da aplicação que o indicador mudou para **Banco permanente** antes de continuar os cadastros.
+
+Commits e novos deploys atualizam somente o código. O conteúdo do Turso permanece fora do pacote da aplicação e não é recriado durante a publicação.
 
 ## Prerequisites
 
