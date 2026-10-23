@@ -1,5 +1,12 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  PASSWORD_OWNER_ID,
+  SESSION_COOKIE,
+  readCookie,
+  safeReturnPath,
+  verifySessionValue,
+} from "./password-auth";
 
 export type ChatGPTUser = {
   userId: string;
@@ -23,9 +30,12 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) {
+    // Na Vercel não há login do ChatGPT: o acesso depende da sessão criada em /entrar.
     if (process.env.VERCEL) {
+      const session = readCookie(requestHeaders.get("cookie"), SESSION_COOKIE);
+      if (!(await verifySessionValue(session))) return null;
       return {
-        userId: "vercel-local-owner",
+        userId: PASSWORD_OWNER_ID,
         displayName: "Administrador",
         email: "local@vercel",
         fullName: "Administrador",
@@ -55,6 +65,7 @@ export async function requireChatGPTUser(
   const user = await getChatGPTUser();
   if (user) return user;
 
+  if (process.env.VERCEL) redirect(`/entrar?return_to=${encodeURIComponent(safeReturnPath(returnTo))}`);
   redirect(chatGPTSignInPath(returnTo));
 }
 

@@ -17,7 +17,8 @@ export type ProductPerformance = {id:string;name:string;sku:string;revenue:numbe
 const dayStart=(date:Date)=>{const value=new Date(date);value.setHours(0,0,0,0);return value};
 const dayEnd=(date:Date)=>{const value=new Date(date);value.setHours(23,59,59,999);return value};
 const parseDay=(value:string,end=false)=>{const date=new Date(`${value}T12:00:00`);return end?dayEnd(date):dayStart(date)};
-const dateOf=(value?:string)=>new Date(value||0);
+// Datas só com o dia (vencimentos) viram meio-dia local, para não recuar um dia no fuso de Brasília.
+const dateOf=(value?:string)=>new Date(value&&/^\d{4}-\d{2}-\d{2}$/.test(value)?`${value}T12:00:00`:value||0);
 const sum=(values:number[])=>values.reduce((total,value)=>total+(Number(value)||0),0);
 const pct=(current:number,previous:number)=>previous?(current-previous)/Math.abs(previous)*100:current?100:0;
 const normalize=(value:string)=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\s+/g," ").toLowerCase();

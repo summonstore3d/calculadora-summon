@@ -23,6 +23,20 @@ A operação usa registros separados por domínio: materiais, compras, produtos,
 
 Commits e novos deploys atualizam somente o código. O conteúdo do Turso permanece fora do pacote da aplicação e não é recriado durante a publicação.
 
+## Acesso na Vercel
+
+Na Vercel não existe o login do ChatGPT Sites, então o sistema pede uma senha em `/entrar`. Sem a senha configurada, ninguém entra.
+
+1. Em **Settings → Environment Variables**, cadastre `APP_PASSWORD` com a senha de acesso (Production e Preview).
+2. Opcional: cadastre `APP_SESSION_SECRET` com um texto longo e aleatório. Sem ele, a própria senha assina a sessão, e trocar a senha desconecta todo mundo.
+3. Faça um novo deploy. A sessão dura 30 dias; o botão **Sair** encerra na hora.
+
+Os dados já gravados continuam ligados ao mesmo dono (`vercel-local-owner`).
+
+## Testes
+
+`npm test` roda os testes de regras (custos, estoque, pedidos, painel, datas, códigos, login e auditoria).
+
 ## Prerequisites
 
 - Node.js `>=22.13.0`

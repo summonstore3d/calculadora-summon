@@ -54,3 +54,9 @@
 @media(max-width:1050px){.catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:920px){.farm-filters{grid-template-columns:1fr 1fr}.farm-dashboard-grid{grid-template-columns:1fr}.farm-machines{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.farm-filters{grid-template-columns:1fr}.farm-summary{grid-template-columns:1fr 1fr}.farm-summary button{padding:13px}.farm-summary strong{font-size:24px}.farm-machines{grid-template-columns:1fr}.dashboard-secondary-title{align-items:flex-start;flex-direction:column}.dashboard-secondary-title button{width:100%}}
+.backup-compare{display:grid;gap:10px;max-height:50vh;overflow:auto}
+.backup-empty-warning{padding:10px 12px;border:1px solid #fca5a5;border-radius:10px;background:#fef2f2;color:#991b1b;font-size:.875rem}
+.load-error{max-width:520px;margin:0 auto;padding:24px 16px;text-align:center;color:var(--foreground)}
+.load-error>svg{width:32px;height:32px;margin:0 auto;color:var(--destructive)}
+.load-error>span{color:var(--muted-foreground)}
+.load-error-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
