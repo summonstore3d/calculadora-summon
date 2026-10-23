@@ -60,3 +60,24 @@
 .load-error>svg{width:32px;height:32px;margin:0 auto;color:var(--destructive)}
 .load-error>span{color:var(--muted-foreground)}
 .load-error-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+.channel-price-list .channel-net{justify-items:end;text-align:right}
+.channel-price-list .channel-net small{font-size:10px;color:#86efac}
+.channel-price-list .channel-net small.negative{color:#fca5a5}
+.live-result-grid small{display:block;color:#94a3b8;font-size:10px}
+.recipe-editor{max-width:min(860px,calc(100vw - 32px))}
+.recipe-editor form{max-height:72vh;overflow:auto;padding-right:4px}
+.recipe-editor-parts{display:grid;gap:10px}
+.recipe-compare{overflow-x:auto}
+.recipe-compare td small{display:block;color:var(--muted-foreground);font-size:11px}
+.diff-up{color:#b42318}
+.diff-down{color:#067647}
+.recipe-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.price-drift-banner,.price-drift-inline{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 14px;border:1px solid #fcd34d;border-radius:10px;background:#fffbeb;color:#92400e}
+.price-drift-banner{margin-bottom:16px}
+.price-drift-banner>svg{width:18px;height:18px;flex:none}
+.price-drift-banner>span{display:grid;flex:1;min-width:200px}
+.price-drift-banner small{color:#b45309}
+.price-drift-inline{margin-block:10px;font-size:13px}
+.price-drift-inline>span{flex:1;min-width:200px}
+.price-refresh-dialog{max-width:min(640px,calc(100vw - 32px))}
+.span-3{grid-column:1/-1}

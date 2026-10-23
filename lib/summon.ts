@@ -5,8 +5,9 @@ export type Settings = { energyRate:number; power:number; manualHourRate:number;
 export type Supplier = { id:string; name:string; contact:string; email:string; note:string; status:"active"|"archived" };
 export type Material = { id:string; brand:string; type:string; color:string; unit:"kg"; supplierId?:string; location:string; stockGrams:number; averageCost:number; minimumGrams:number; status:"active"|"archived"; createdAt?:string };
 export type MaterialPart = { materialId:string; name:string; weightGrams:number; costPerKg:number };
-export type CostSnapshot = { material:number; energy:number; depreciation:number; labor:number; failure:number; maintenance:number; other:number; total:number; unitCost:number; directPrice:number; shopeePrice:number; mlPrice:number; directProfit:number; directMargin:number; settings:Settings };
-export type RecipeVersion = { id:string; productId:string; version:number; parts:MaterialPart[]; wastePercent:number; failurePercent:number; printHours:number; manualHours:number; unitsPerPrint:number; snapshot:CostSnapshot; createdAt:string };
+export type CostSnapshot = { material:number; energy:number; depreciation:number; labor:number; failure:number; maintenance:number; other:number; total:number; unitCost:number; directPrice:number; shopeePrice:number; mlPrice:number; directProfit:number; directMargin:number; shopeeProfit?:number; shopeeMargin?:number; mlProfit?:number; mlMargin?:number; settings:Settings };
+// manualHours = preparo por impressão (mesa, remoção, troca de filamento); finishingMinutes = acabamento por peça.
+export type RecipeVersion = { id:string; productId:string; version:number; parts:MaterialPart[]; wastePercent:number; failurePercent:number; printHours:number; manualHours:number; finishingMinutes?:number; otherCost?:number; machineId?:string; unitsPerPrint:number; snapshot:CostSnapshot; createdAt:string; note?:string };
 export type Product = { id:string; sku:string; name:string; description:string; category:string; universe:string; tags:string[]; dimensions:string; leadDays:number; imageUrl?:string; minimumStock:number; fulfillment:"hybrid"|"ready"|"made-to-order"; status:"active"|"paused"|"archived"; activeRecipeId:string; readyStock:number; snapshot:CostSnapshot; createdAt:string };
 export type Purchase = { id:string; materialId:string; supplierId?:string; kg:number; subtotal:number; freight:number; total:number; date:string; note:string; reversedAt?:string };
 export type Movement = { id:string; entity:"material"|"product"; entityId:string; kind:string; quantity:number; balanceAfter:number; referenceId?:string; unitCost?:number; note:string; createdAt:string };
@@ -70,9 +71,70 @@ export function financialBreakdown(order:Order){
   return{revenue,productCost,fees,taxes,shipping,advertising,other,calculatedProfit,recordedProfit,difference,margin,anomalies};
 }
 
-export function calculateCost(input:{parts:MaterialPart[];hours:number;manualHours:number;wastePercent:number;failurePercent:number;other:number;unitsPerPrint?:number},settings:Settings):CostSnapshot{
-  const units=Math.max(1,input.unitsPerPrint||1),raw=input.parts.reduce((sum,p)=>sum+(p.weightGrams/1000)*(p.costPerKg||0),0),material=raw*(1+input.wastePercent/100),energy=input.hours*settings.power*settings.energyRate,depreciation=settings.machineLife?settings.machineValue/settings.machineLife*input.hours:0,labor=input.manualHours*settings.manualHourRate,maintenance=(depreciation+energy)*settings.maintenancePercent/100,base=material+energy+depreciation+labor+maintenance+input.other+settings.packagingCost*units,failure=base*input.failurePercent/100,total=cents(base+failure),unitCost=cents(total/units),target=unitCost*(1+settings.markup/100),tax=settings.taxRate/100,round=(v:number)=>Math.max(settings.minPrice,Math.ceil(v/Math.max(.01,settings.rounding))*Math.max(.01,settings.rounding)),channel=(fee:number,fixed:number)=>cents(round((target+fixed)/Math.max(.01,1-tax-fee/100))),directPrice=channel(0,0),shopeePrice=channel(settings.shopeeFee,settings.shopeeFixed),mlPrice=channel(settings.mlFee,settings.mlFixed),directProfit=cents(directPrice-unitCost),directMargin=directPrice?cents(directProfit/directPrice*100):0;
-  return{material:cents(material),energy:cents(energy),depreciation:cents(depreciation),labor:cents(labor),failure:cents(failure),maintenance:cents(maintenance),other:cents(input.other+settings.packagingCost*units),total,unitCost,directPrice,shopeePrice,mlPrice,directProfit,directMargin,settings:{...settings}};
+export type CostInput={parts:MaterialPart[];hours:number;manualHours:number;finishingMinutes?:number;wastePercent:number;failurePercent:number;other:number;unitsPerPrint?:number};
+
+/** Lucro e margem reais de um preço num canal: desconta imposto, taxa percentual e taxa fixa do canal. */
+export function channelNet(snapshot:Pick<CostSnapshot,"unitCost"|"settings">,price:number,channel:Channel|string){
+  const st=snapshot.settings||defaults,fee=channel==="shopee"?st.shopeeFee:channel==="ml"?st.mlFee:0,fixed=channel==="shopee"?st.shopeeFixed:channel==="ml"?st.mlFixed:0;
+  const taxes=cents(price*st.taxRate/100),fees=cents(price*fee/100+fixed),profit=cents(price-taxes-fees-snapshot.unitCost);
+  return{price,taxes,fees,profit,margin:price?cents(profit/price*100):0};
+}
+
+/** Lucro e margem da venda direta, já com imposto. Funciona também com produtos gravados antes desta regra. */
+export const directNet=(snapshot:Pick<CostSnapshot,"unitCost"|"settings"|"directPrice">)=>channelNet(snapshot,snapshot.directPrice,"direct");
+
+export function calculateCost(input:CostInput,settings:Settings):CostSnapshot{
+  const units=Math.max(1,input.unitsPerPrint||1),raw=input.parts.reduce((sum,p)=>sum+(p.weightGrams/1000)*(p.costPerKg||0),0),material=raw*(1+input.wastePercent/100),energy=input.hours*settings.power*settings.energyRate,depreciation=settings.machineLife?settings.machineValue/settings.machineLife*input.hours:0,setupLabor=input.manualHours*settings.manualHourRate,finishingLabor=(input.finishingMinutes||0)/60*units*settings.manualHourRate,labor=setupLabor+finishingLabor,maintenance=(depreciation+energy)*settings.maintenancePercent/100,other=input.other+settings.packagingCost*units;
+  // A reserva de falha cobre reimprimir: material, energia, máquina, manutenção e preparo. Acabamento, embalagem e outros só acontecem com a peça boa.
+  const failure=(material+energy+depreciation+maintenance+setupLabor)*input.failurePercent/100,total=cents(material+energy+depreciation+labor+maintenance+other+failure),unitCost=cents(total/units),target=unitCost*(1+settings.markup/100),tax=settings.taxRate/100,step=Math.max(.01,settings.rounding),round=(v:number)=>Math.max(settings.minPrice,Math.ceil(v/step)*step),channel=(fee:number,fixed:number)=>cents(round((target+fixed)/Math.max(.01,1-tax-fee/100))),directPrice=channel(0,0),shopeePrice=channel(settings.shopeeFee,settings.shopeeFixed),mlPrice=channel(settings.mlFee,settings.mlFixed);
+  const base={unitCost,settings:{...settings}},direct=channelNet(base,directPrice,"direct"),shopee=channelNet(base,shopeePrice,"shopee"),ml=channelNet(base,mlPrice,"ml");
+  return{material:cents(material),energy:cents(energy),depreciation:cents(depreciation),labor:cents(labor),failure:cents(failure),maintenance:cents(maintenance),other:cents(other),total,unitCost,directPrice,shopeePrice,mlPrice,directProfit:direct.profit,directMargin:direct.margin,shopeeProfit:shopee.profit,shopeeMargin:shopee.margin,mlProfit:ml.profit,mlMargin:ml.margin,settings:{...settings}};
+}
+
+/** Parâmetros com os dados da impressora escolhida (potência, valor e vida útil). */
+export function machineSettings(settings:Settings,machine?:Pick<Machine,"powerKw"|"acquisitionValue"|"lifeHours">){
+  return machine?{...settings,power:machine.powerKw||settings.power,machineValue:machine.acquisitionValue||settings.machineValue,machineLife:machine.lifeHours||settings.machineLife}:{...settings};
+}
+
+/** Outros custos por impressão da ficha, sem a embalagem (que é somada por unidade). Fichas antigas não guardavam o valor separado. */
+export function recipeOther(recipe:RecipeVersion){
+  if(recipe.otherCost!==undefined)return recipe.otherCost;
+  const st=recipe.snapshot?.settings||defaults;
+  return Math.max(0,cents((recipe.snapshot?.other||0)-st.packagingCost*Math.max(1,recipe.unitsPerPrint)));
+}
+
+export type RecipeDraft={parts:MaterialPart[];printHours:number;manualHours:number;finishingMinutes:number;wastePercent:number;failurePercent:number;otherCost:number;unitsPerPrint:number;machineId?:string;markup:number;note?:string};
+
+/** Custo e preços de uma ficha com o custo médio atual dos filamentos e os parâmetros atuais. */
+export function costForDraft(state:AppState,draft:RecipeDraft){
+  const parts=draft.parts.map(p=>{const m=state.materials.find(x=>x.id===p.materialId);return m?{...p,name:`${m.type} ${m.color}`,costPerKg:m.averageCost}:p});
+  const machine=state.machines.find(m=>m.id===draft.machineId),settings={...machineSettings(state.settings,machine),markup:draft.markup};
+  return{parts,snapshot:calculateCost({parts,hours:draft.printHours,manualHours:draft.manualHours,finishingMinutes:draft.finishingMinutes,wastePercent:draft.wastePercent,failurePercent:draft.failurePercent,other:draft.otherCost,unitsPerPrint:draft.unitsPerPrint},settings)};
+}
+
+export function draftFromRecipe(recipe:RecipeVersion):RecipeDraft{
+  return{parts:recipe.parts.map(p=>({...p})),printHours:recipe.printHours,manualHours:recipe.manualHours,finishingMinutes:recipe.finishingMinutes||0,wastePercent:recipe.wastePercent,failurePercent:recipe.failurePercent,otherCost:recipeOther(recipe),unitsPerPrint:recipe.unitsPerPrint,machineId:recipe.machineId,markup:recipe.snapshot?.settings?.markup??defaults.markup};
+}
+
+/** Grava uma nova versão da ficha técnica e atualiza custo e preços sugeridos do produto. As versões anteriores ficam no histórico. */
+export function saveRecipeVersion(state:AppState,productId:string,draft:RecipeDraft){
+  const product=state.products.find(p=>p.id===productId);if(!product)throw new Error("Produto não encontrado");
+  const parts=draft.parts.filter(p=>p.weightGrams>0);
+  if(!parts.length)throw new Error("Informe ao menos um material com peso");
+  if(parts.some(p=>!p.materialId))throw new Error("Escolha o material de cada linha");
+  if(draft.printHours<0||draft.manualHours<0||draft.finishingMinutes<0||draft.otherCost<0)throw new Error("Tempos e custos não podem ser negativos");
+  if(draft.unitsPerPrint<1)throw new Error("Unidades por impressão deve ser pelo menos 1");
+  const {parts:pricedParts,snapshot}=costForDraft(state,{...draft,parts}),version=Math.max(0,...state.recipes.filter(r=>r.productId===productId).map(r=>r.version))+1;
+  const recipe:RecipeVersion={id:uid(),productId,version,parts:pricedParts,wastePercent:draft.wastePercent,failurePercent:draft.failurePercent,printHours:draft.printHours,manualHours:draft.manualHours,finishingMinutes:draft.finishingMinutes,otherCost:draft.otherCost,machineId:draft.machineId||undefined,unitsPerPrint:Math.trunc(draft.unitsPerPrint),snapshot,createdAt:new Date().toISOString(),note:draft.note};
+  return{...state,recipes:[...state.recipes,recipe],products:state.products.map(p=>p.id===productId?{...p,activeRecipeId:recipe.id,snapshot}:p)};
+}
+
+/** Compara o preço gravado no produto com o que a ficha dá hoje (custo médio e parâmetros atuais). */
+export function priceDrift(state:AppState,product:Product){
+  const recipe=recipeFor(state,product);if(!recipe)return undefined;
+  const fresh=costForDraft(state,draftFromRecipe(recipe)).snapshot,current=product.snapshot,pct=(a:number,b:number)=>b?cents((a-b)/b*100):a?100:0;
+  const costChange=pct(fresh.unitCost,current.unitCost),priceChange=pct(fresh.directPrice,current.directPrice);
+  return{recipe,fresh,current,costChange,priceChange,stale:Math.abs(costChange)>=1||Math.abs(priceChange)>=1};
 }
 
 export function hydrateState(raw:any):AppState{
@@ -156,6 +218,12 @@ export function approveOrder(state:AppState,orderId:string){const order=state.or
 
 export function transitionOrder(state:AppState,orderId:string,status:OrderStatus){const order=state.orders.find(o=>o.id===orderId);if(!order)throw new Error("Pedido não encontrado");if(!orderTransitions[order.status].includes(status))throw new Error(`Não é possível passar de ${order.status} para ${status}`);let next:AppState;if(status==="aprovado")next=approveOrder(state,orderId);else if(status==="cancelado"){const released=releaseOrderStock(state,orderId);next={...released,productionOrders:released.productionOrders.map(p=>p.salesOrderId===orderId&&!['concluida','cancelada'].includes(p.status)?{...p,status:"cancelada" as const}:p),orders:released.orders.map(o=>o.id===orderId?{...o,status:"cancelado" as const}:o)}}else next={...state,orders:state.orders.map(o=>o.id===orderId?{...o,status}:o)};const resulting=next.orders.find(o=>o.id===orderId),finalStatus=resulting?.status||status,note=status==="aprovado"&&finalStatus==="pronto"?"Pedido aprovado e estoque separado":status==="aprovado"&&finalStatus==="producao"?"Pedido aprovado e produção planejada":finalStatus==="cancelado"?"Pedido cancelado":`Pedido movido para ${finalStatus.replaceAll("_"," ")}`;return{...next,orders:next.orders.map(o=>o.id===orderId?withOrderEvent(o,finalStatus,note):o)}}
 
+/** Horas de mão de obra previstas numa produção: preparo por impressão + acabamento das peças aprovadas. */
+export function defaultProductionLaborHours(recipe:RecipeVersion,approved:number,lost:number){
+  const prints=(approved+lost)/Math.max(1,recipe.unitsPerPrint);
+  return cents(recipe.manualHours*prints+(recipe.finishingMinutes||0)/60*approved);
+}
+
 export function buildProduction(state:AppState,orderId:string,input:{approved:number;lost:number;hours:number;manualHours?:number;actualConsumption?:MaterialPart[];lossReason:string;note:string}){
   const po=state.productionOrders.find(x=>x.id===orderId);if(!po)throw new Error("Ordem não encontrada");if(po.status==="concluida")throw new Error("Ordem já concluída");
   const product=state.products.find(x=>x.id===po.productId),recipe=state.recipes.find(x=>x.id===po.recipeVersionId);if(!product||!recipe)throw new Error("Produto ou ficha técnica não encontrado");
@@ -164,7 +232,7 @@ export function buildProduction(state:AppState,orderId:string,input:{approved:nu
   if(input.hours<0||(input.manualHours||0)<0)throw new Error("As horas reais não podem ser negativas");
   if(lost>0&&!input.lossReason.trim())throw new Error("Informe o motivo das perdas");
   for(const c of consumption){const m=state.materials.find(x=>x.id===c.materialId),label=c.name||(m?[m.type,m.color].filter(Boolean).join(" "):"insumo sem vínculo");if(!m)throw new Error(`Vincule ${label||"o insumo"} a um material do estoque antes de concluir`);if(m.stockGrams<c.weightGrams)throw new Error(`Estoque insuficiente de ${label}. Disponível: ${(m.stockGrams/1000).toFixed(3)} kg; necessário: ${(c.weightGrams/1000).toFixed(3)} kg`)}
-  const now=new Date().toISOString(),materials=state.materials.map(m=>{const c=consumption.find(x=>x.materialId===m.id);return c?{...m,stockGrams:cents(m.stockGrams-c.weightGrams)}:m}),materialCost=consumption.reduce((s,c)=>{const m=state.materials.find(x=>x.id===c.materialId);return s+c.weightGrams/1000*(m?.averageCost||c.costPerKg)},0),machine=state.machines.find(x=>x.id===po.machineId),settings={...recipe.snapshot.settings,power:machine?.powerKw||recipe.snapshot.settings.power,machineValue:machine?.acquisitionValue||recipe.snapshot.settings.machineValue,machineLife:machine?.lifeHours||recipe.snapshot.settings.machineLife},operational=calculateCost({parts:[],hours:input.hours,manualHours:input.manualHours??recipe.manualHours*factor,wastePercent:0,failurePercent:0,other:recipe.snapshot.other,unitsPerPrint:Math.max(1,approved)},settings),totalCost=cents(materialCost+operational.energy+operational.depreciation+operational.labor+operational.maintenance+operational.other),unitCost=approved?cents(totalCost/approved):0,costBreakdown={materials:cents(materialCost),energy:operational.energy,depreciation:operational.depreciation,labor:operational.labor,maintenance:operational.maintenance,other:operational.other,total:totalCost},lotId=approved?uid():undefined,lot=approved?{id:lotId!,code:nextSequence(state.lots.map(l=>l.code),`LT-${localDay(now).replaceAll("-","")}-`,1),productId:product.id,productionOrderId:po.id,recipeVersionId:recipe.id,machineId:po.machineId,initialQuantity:approved,balance:approved,unitCost,costBreakdown,producedAt:now,note:input.note} as ProductLot:undefined,movements=[...state.movements];
+  const now=new Date().toISOString(),materials=state.materials.map(m=>{const c=consumption.find(x=>x.materialId===m.id);return c?{...m,stockGrams:cents(m.stockGrams-c.weightGrams)}:m}),materialCost=consumption.reduce((s,c)=>{const m=state.materials.find(x=>x.id===c.materialId);return s+c.weightGrams/1000*(m?.averageCost||c.costPerKg)},0),machine=state.machines.find(x=>x.id===po.machineId),settings=machineSettings(recipe.snapshot.settings,machine),operational=calculateCost({parts:[],hours:input.hours,manualHours:input.manualHours??defaultProductionLaborHours(recipe,approved,lost),wastePercent:0,failurePercent:0,other:cents(recipeOther(recipe)*factor),unitsPerPrint:Math.max(1,approved)},settings),totalCost=cents(materialCost+operational.energy+operational.depreciation+operational.labor+operational.maintenance+operational.other),unitCost=approved?cents(totalCost/approved):0,costBreakdown={materials:cents(materialCost),energy:operational.energy,depreciation:operational.depreciation,labor:operational.labor,maintenance:operational.maintenance,other:operational.other,total:totalCost},lotId=approved?uid():undefined,lot=approved?{id:lotId!,code:nextSequence(state.lots.map(l=>l.code),`LT-${localDay(now).replaceAll("-","")}-`,1),productId:product.id,productionOrderId:po.id,recipeVersionId:recipe.id,machineId:po.machineId,initialQuantity:approved,balance:approved,unitCost,costBreakdown,producedAt:now,note:input.note} as ProductLot:undefined,movements=[...state.movements];
   for(const c of consumption){const m=materials.find(x=>x.id===c.materialId)!;movements.push({id:uid(),entity:"material",entityId:c.materialId,kind:"production-consumption",quantity:-c.weightGrams,balanceAfter:m.stockGrams,referenceId:po.id,unitCost:m.averageCost,note:`Consumo ${po.number}`,createdAt:now})}
   if(approved)movements.push({id:uid(),entity:"product",entityId:product.id,kind:"production",quantity:approved,balanceAfter:productStock(state,product.id)+approved,referenceId:po.id,unitCost,note:`Produção ${po.number}`,createdAt:now});
   const next={...state,materials,lots:lot?[...state.lots,lot]:state.lots,movements,products:state.products.map(p=>p.id===product.id?{...p,readyStock:p.readyStock+approved}:p),machines:state.machines.map(m=>m.id===po.machineId?{...m,accumulatedHours:cents(m.accumulatedHours+input.hours)}:m),productionOrders:state.productionOrders.map(x=>x.id===po.id?{...x,approvedQuantity:approved,lostQuantity:lost,actualConsumption:consumption,actualHours:input.hours,lossReason:input.lossReason,note:input.note,status:"concluida" as const,completedAt:now,lotId}:x)} as AppState;
