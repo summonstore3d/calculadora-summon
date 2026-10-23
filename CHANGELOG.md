@@ -1,5 +1,40 @@
 # Mudanças
 
+## Fase 3 · Completar o financeiro (23/10/2026)
+
+**Tela do Financeiro, refeita**
+- Seletor de mês e quatro abas: Visão geral, A pagar, A receber e Extrato.
+- Visão geral: entradas, saídas, saldo do mês e caixa acumulado, lucro líquido, totais a receber e a pagar com vencidos, e a previsão dos próximos 30 dias.
+- Resultado do mês (DRE) comparado ao mês anterior: receita, descontos, taxas, impostos, custo das peças vendidas, frete, anúncios, margem de contribuição, despesas por categoria e lucro líquido. Exporta em CSV.
+- Extrato do caixa com saldo inicial, cada entrada e saída e o saldo linha a linha. Exporta em CSV.
+- Saldo inicial do caixa configurável em Parâmetros.
+
+**Contas a pagar**
+- Nova conta com categoria, vencimento, parcelas, "repete todo mês" e "já está paga".
+- Editar e cancelar contas (antes não era possível).
+- Pagar com data e valor; conta recorrente gera automaticamente a do mês seguinte.
+- Situação visível: vencida, vence hoje, vence esta semana, paga, cancelada.
+
+**Compras e manutenções**
+- Ao registrar uma compra de filamento: à vista (sai do caixa na data), a prazo ou parcelado (vira contas a pagar).
+- Estornar uma compra cancela as parcelas ainda em aberto.
+- Registrar manutenção com custo lança a saída no caixa.
+- Compras e manutenções antigas, sem conta vinculada, entram no extrato pela data em que foram registradas.
+
+**Contas a receber**
+- Recebimento parcial (sinal e restante), com histórico de cada recebimento.
+- Pedidos da Shopee e do Mercado Livre entram pelo valor do repasse, sem as taxas, com previsão de pagamento configurável em Parâmetros (padrão 15 dias).
+
+**Lucro igual em todas as telas**
+- Painel, Relatórios e Financeiro usam a mesma regra: despesas pela data de vencimento, sem compras de filamento, manutenção e a categoria Impostos (que já estão no custo das peças ou no imposto de cada pedido). No painel, o card passou a se chamar "Lucro líquido".
+
+**Painel e relatórios**
+- Metas do mês (cadastradas em Parâmetros) aparecem no painel com o realizado, a porcentagem e um marcador de onde deveriam estar no dia de hoje.
+- CSV de relatórios abre certo no Excel em português: acentos, ponto e vírgula e vírgula decimal.
+
+**Testes**
+- 11 testes novos de financeiro. Total: 47 testes de regra passando, mais o de persistência, que exige as dependências instaladas.
+
 ## Fase 2 · Acertar os números (23/10/2026)
 
 **Calculadora**

@@ -81,3 +81,74 @@
 .price-drift-inline>span{flex:1;min-width:200px}
 .price-refresh-dialog{max-width:min(640px,calc(100vw - 32px))}
 .span-3{grid-column:1/-1}
+.finance-head-actions{display:flex;flex-wrap:wrap;align-items:end;gap:10px}
+.finance-month{display:grid;gap:4px;font-size:12px;color:var(--muted-foreground)}
+.finance-month select{min-width:190px}
+.finance-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:18px;padding:4px;border:1px solid var(--border);border-radius:12px;background:#fff;width:fit-content;max-width:100%}
+.finance-tabs button{border:0;background:transparent;padding:8px 14px;border-radius:8px;font:inherit;font-size:14px;color:var(--muted-foreground);cursor:pointer}
+.finance-tabs button.active{background:var(--primary);color:var(--primary-foreground)}
+.finance-tabs button:focus-visible,.finance-filter button:focus-visible,.finance-account:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.finance-accounts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.finance-account{display:grid;gap:4px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:#fff;text-align:left;font:inherit;color:inherit}
+button.finance-account{cursor:pointer}
+button.finance-account:hover{border-color:#b9c7dc}
+.finance-account span{font-size:12px;color:var(--muted-foreground)}
+.finance-account b{font-size:20px;font-variant-numeric:tabular-nums}
+.finance-account small{font-size:12px;color:var(--muted-foreground)}
+.tone-overdue{color:#b42318!important}
+.tone-week{color:#b54708!important}
+@media (min-width:921px){.finance-table .table-wrap table{min-width:640px}}
+.finance-table td{font-variant-numeric:tabular-nums}
+.dre-table td:not(:first-child),.dre-table th:not(:first-child){text-align:right;white-space:nowrap}
+.dre-table tr.dre-subtotal td{background:#f7f9fc;font-weight:600}
+.dre-table tr.dre-result td{background:#eef4ff;font-weight:700;font-size:15px}
+.dre-table tr.dre-deduction td:first-child b{font-weight:400}
+.finance-note{margin-top:12px;font-size:13px;color:var(--muted-foreground);max-width:72ch}
+.finance-actions{display:flex;justify-content:flex-end;margin-top:12px}
+.finance-filter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.finance-filter button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+.finance-filter button.active{border-color:var(--primary);color:var(--primary);background:var(--accent)}
+.due-chip{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;white-space:nowrap;background:#f1f4f8;color:#475467}
+.due-overdue{background:#fef3f2;color:#b42318}
+.due-today,.due-week{background:#fffaeb;color:#b54708}
+.due-paid{background:#ecfdf3;color:#067647}
+.due-partial{background:#eef4ff;color:#1d4ed8}
+.due-cancelled{background:#f2f4f7;color:#98a2b3;text-decoration:line-through}
+.row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.ledger-summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin-bottom:12px;font-size:13px;color:var(--muted-foreground)}
+.ledger-summary b{color:var(--foreground);font-variant-numeric:tabular-nums}
+.ledger-summary button{margin-left:auto}
+.tone-in,.tone-in b{color:#067647}
+.tone-out,.tone-out b{color:#b42318}
+.receipt-history{display:grid;gap:4px;padding:10px 12px;border-radius:10px;background:#f7f9fc;font-size:13px}
+.receipt-history div{display:flex;justify-content:space-between;gap:12px}
+@media (max-width:900px){.finance-accounts{grid-template-columns:1fr}}
+.goals-panel{margin-bottom:18px;padding:16px;border:1px solid var(--border);border-radius:14px;background:#fff}
+.goals-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin-bottom:12px}
+.goals-head small{color:var(--muted-foreground);font-size:12px}
+.goals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.goal{display:grid;gap:3px;padding:12px;border-radius:10px;background:#f7f9fc}
+.goal span{font-size:12px;color:var(--muted-foreground)}
+.goal b{font-size:18px;font-variant-numeric:tabular-nums}
+.goal small{font-size:12px;color:var(--muted-foreground)}
+.goal-bar{position:relative;height:6px;margin-top:6px;border-radius:999px;background:#e4e9f1}
+.goal-bar i{display:block;height:100%;border-radius:inherit}
+.goal-bar em{position:absolute;top:-3px;width:2px;height:12px;background:#344054}
+.goal-good .goal-bar i{background:#12b76a}
+.goal-warn .goal-bar i{background:#f79009}
+.goal-bad .goal-bar i{background:#f04438}
+.goals-empty{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px;padding:10px 14px;border:1px dashed var(--border);border-radius:12px;color:var(--muted-foreground);font-size:13px}
+@media (max-width:920px){
+.dre-table .table-wrap{overflow-x:auto;border:1px solid var(--border);background:#fff}
+.dre-table .table-wrap table{display:table;min-width:420px}
+.dre-table .table-wrap thead{display:table-header-group}
+.dre-table .table-wrap tbody{display:table-row-group}
+.dre-table .table-wrap tr{display:table-row;padding:0;border:0;border-radius:0}
+.dre-table .table-wrap td,.dre-table .table-wrap th{display:table-cell;padding:9px 10px!important;border-bottom:1px solid #e8edf3}
+.dre-table .table-wrap td:before{content:none}
+.finance-tabs{display:grid;grid-template-columns:1fr 1fr;width:100%}
+.finance-tabs button{padding:8px;font-size:13px}
+.finance-head-actions{width:100%}
+.finance-month,.finance-month select{width:100%}
+.ledger-summary button{margin-left:0}
+}

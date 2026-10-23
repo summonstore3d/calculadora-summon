@@ -1,4 +1,5 @@
 import type {AppState,Channel,Order,Product} from "./summon.ts";
+import {countsInResult,receiptsOf} from "./finance.ts";
 
 export type DashboardPeriod = "today" | "week" | "month" | "quarter" | "year" | "custom";
 export type DashboardFilters = {
@@ -55,13 +56,24 @@ function productScope(product:Product,filters:DashboardFilters){
   return (!filters.productId||product.id===filters.productId)&&(!filters.category||normalize(product.category)===normalize(filters.category))&&(!filters.universe||normalize(product.universe)===normalize(filters.universe));
 }
 
+// Em mês, trimestre e ano, as contas do período inteiro entram no resultado (inclusive as que ainda vão vencer),
+// para o lucro do painel bater com o resultado do Financeiro.
+function calendarPeriodEnd(period:DashboardPeriod,start:Date){
+  const end=new Date(start);
+  if(period==="month")end.setMonth(end.getMonth()+1,0);
+  else if(period==="quarter")end.setMonth(end.getMonth()+3,0);
+  else if(period==="year")end.setMonth(12,0);
+  else return undefined;
+  return dayEnd(end);
+}
+
 export function buildDashboardAnalytics(state:AppState,filters:DashboardFilters,reference=new Date()){
   const range=dashboardRange(filters,reference),orders=completedBetween(state,filters,range.start,range.end),previousOrders=completedBetween(state,filters,range.previousStart,range.previousEnd);
   const filteredItems=orders.flatMap(order=>scopedItems(order,filters).map(item=>({order,item}))),previousItems=previousOrders.flatMap(order=>scopedItems(order,filters)),hasItemFilter=Boolean(filters.productId||filters.category||filters.universe);
   const itemRatio=(order:Order)=>{const scoped=sum(scopedItems(order,filters).map(item=>item.revenue));return order.netRevenue?Math.min(1,scoped/order.netRevenue):1};
   const netRevenue=hasItemFilter?sum(filteredItems.map(({item})=>item.revenue)):sum(orders.map(order=>order.netRevenue)),grossRevenue=sum(orders.map(order=>order.gross*itemRatio(order))),salesProfit=hasItemFilter?sum(filteredItems.map(({item})=>item.profit)):sum(orders.map(order=>order.profit)),previousNet=hasItemFilter?sum(previousItems.map(item=>item.revenue)):sum(previousOrders.map(order=>order.netRevenue));
-  const expenses=state.expenses.filter(expense=>expense.status==="pago"&&dateOf(expense.paidAt||expense.dueDate)>=range.start&&dateOf(expense.paidAt||expense.dueDate)<=range.end),hasDimensionFilter=Boolean((filters.channel&&filters.channel!=="all")||filters.productId||filters.category||filters.universe||filters.campaignId),allPeriodRevenue=sum(state.orders.filter(order=>order.status==="concluido"&&dateOf(order.completedAt||order.createdAt)>=range.start&&dateOf(order.completedAt||order.createdAt)<=range.end).map(order=>order.netRevenue)),expenseShare=hasDimensionFilter&&allPeriodRevenue?Math.min(1,netRevenue/allPeriodRevenue):1,operatingExpenses=sum(expenses.map(expense=>expense.amount))*expenseShare,operatingProfit=salesProfit-operatingExpenses;
-  const orderIds=new Set(orders.map(order=>order.id)),cashOrderIds=new Set(state.orders.filter(order=>orderMatches(order,filters)).map(order=>order.id)),payments=state.payments.filter(payment=>cashOrderIds.has(payment.orderId)&&payment.status!=="estornado"&&payment.received>0&&dateOf(payment.receivedAt||payment.dueDate)>=range.start&&dateOf(payment.receivedAt||payment.dueDate)<=range.end),cashReceived=sum(payments.map(payment=>payment.received)),receivables=Math.max(0,netRevenue-sum(state.payments.filter(payment=>orderIds.has(payment.orderId)&&payment.status!=="estornado").map(payment=>payment.received)));
+  const expenseEnd=calendarPeriodEnd(filters.period,range.start)||range.end,expenses=state.expenses.filter(expense=>countsInResult(expense)&&dateOf(expense.dueDate)>=range.start&&dateOf(expense.dueDate)<=expenseEnd),hasDimensionFilter=Boolean((filters.channel&&filters.channel!=="all")||filters.productId||filters.category||filters.universe||filters.campaignId),allPeriodRevenue=sum(state.orders.filter(order=>order.status==="concluido"&&dateOf(order.completedAt||order.createdAt)>=range.start&&dateOf(order.completedAt||order.createdAt)<=range.end).map(order=>order.netRevenue)),expenseShare=hasDimensionFilter&&allPeriodRevenue?Math.min(1,netRevenue/allPeriodRevenue):1,operatingExpenses=sum(expenses.map(expense=>expense.amount))*expenseShare,operatingProfit=salesProfit-operatingExpenses;
+  const orderIds=new Set(orders.map(order=>order.id)),cashOrderIds=new Set(state.orders.filter(order=>orderMatches(order,filters)).map(order=>order.id)),payments=state.payments.filter(payment=>cashOrderIds.has(payment.orderId)&&payment.status!=="estornado"&&payment.received>0&&dateOf(payment.receivedAt||payment.dueDate)>=range.start&&dateOf(payment.receivedAt||payment.dueDate)<=range.end),cashReceived=sum(state.payments.filter(payment=>cashOrderIds.has(payment.orderId)&&payment.status!=="estornado").flatMap(receiptsOf).filter(receipt=>dateOf(receipt.date)>=range.start&&dateOf(receipt.date)<=range.end).map(receipt=>receipt.amount)),receivables=Math.max(0,netRevenue-sum(state.payments.filter(payment=>orderIds.has(payment.orderId)&&payment.status!=="estornado").map(payment=>payment.received)));
   const advertising=sum(orders.map(order=>order.advertisingCost*itemRatio(order))),sold=sum(filteredItems.map(({item})=>item.quantity)),newCustomers=state.customers.filter(customer=>dateOf(customer.createdAt)>=range.start&&dateOf(customer.createdAt)<=range.end).length;
   const productions=state.productionOrders.filter(order=>order.status==="concluida"&&dateOf(order.completedAt||order.createdAt)>=range.start&&dateOf(order.completedAt||order.createdAt)<=range.end&&(!filters.productId||order.productId===filters.productId)),produced=sum(productions.map(order=>order.approvedQuantity)),machineHours=sum(productions.map(order=>order.actualHours));
   const openOrders=state.orders.filter(order=>!["concluido","cancelado","devolvido"].includes(order.status)&&orderMatches(order,filters)),awaitingProduction=state.productionOrders.filter(order=>["planejada","aguardando_material","fila"].includes(order.status)&&(!filters.productId||order.productId===filters.productId)),overdueProduction=state.productionOrders.filter(order=>!["concluida","cancelada"].includes(order.status)&&Boolean(order.dueDate)&&dateOf(order.dueDate)<dayStart(reference)&&(!filters.productId||order.productId===filters.productId));

@@ -106,7 +106,8 @@ test("orçamento pode ser editado com recálculo e histórico",()=>{
   assert.equal(state.orders[0].items[0].revenue,176);
   assert.equal(state.orders[0].customerName,"Cliente editado");
   assert.equal(state.orders[0].history?.at(-1)?.note,"Orçamento editado");
-  assert.equal(state.payments[0].expected,171);
+  // Shopee repassa sem a taxa: 171 − (180 × 20% + 4) = 131
+  assert.equal(state.payments[0].expected,131);
   state=transitionOrder(state,"o1","aprovado");
   assert.throws(()=>updateDraftOrder(state,"o1",{customerName:"X",channel:"direct",seller:"",discount:0,shippingCharged:0,shippingPaid:0,otherCosts:0,paymentMethod:"",origin:"",note:"",items:[]}));
 });
