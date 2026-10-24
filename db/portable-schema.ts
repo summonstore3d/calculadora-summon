@@ -1,5 +1,4 @@
-// Used only by the Vercel/libSQL adapter. D1 schema changes remain owned by
-// the versioned Drizzle migrations in /drizzle.
+// Tabelas e índices do banco Turso. Executado a cada início do servidor; IF NOT EXISTS torna seguro repetir.
 export const portableSchema = [
   "CREATE TABLE IF NOT EXISTS app_states (user_id TEXT PRIMARY KEY NOT NULL, version INTEGER NOT NULL DEFAULT 1, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS user_profiles (user_id TEXT PRIMARY KEY NOT NULL, version INTEGER NOT NULL DEFAULT 0, settings TEXT NOT NULL, write_token TEXT NOT NULL, legacy_migrated_at TEXT, updated_at TEXT NOT NULL)",
@@ -30,4 +29,19 @@ export const portableSchema = [
   "CREATE INDEX IF NOT EXISTS idx_order_items_user_order ON order_items (user_id, order_id)",
   "CREATE INDEX IF NOT EXISTS idx_recipe_components_recipe ON recipe_components (user_id, recipe_version_id)",
   "CREATE INDEX IF NOT EXISTS idx_calculations_user_created ON calculations (user_id, created_at)",
+  // Toda leitura filtra pelo dono; sem estes índices o banco percorre a tabela inteira.
+  "CREATE INDEX IF NOT EXISTS idx_audit_events_user ON audit_events (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_materials_user ON materials (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_suppliers_user ON suppliers (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_purchase_records_user ON purchase_records (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_recipe_versions_user ON recipe_versions (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_machines_user ON machines (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_maintenances_user ON maintenances (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_production_orders_user ON production_orders (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_product_lots_user ON product_lots (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_customers_user ON customers (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_payments_user ON payments (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_goals_user ON goals (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses (user_id)",
 ];
