@@ -2,7 +2,29 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, BarChart3, Boxes, Calculator, ChevronDown, ClipboardList, Download, Factory, Gauge, Layers3, Megaphone, Menu, Package, Printer, Search, Settings, ShoppingCart, SlidersHorizontal, Users, WalletCards, X } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Boxes,
+  Calculator,
+  ChevronDown,
+  ClipboardList,
+  Download,
+  Factory,
+  Gauge,
+  Layers3,
+  Megaphone,
+  Menu,
+  Package,
+  Printer,
+  Search,
+  Settings,
+  ShoppingCart,
+  SlidersHorizontal,
+  Users,
+  WalletCards,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppState, emptyState, hydrateState, normalize, today } from "@/lib/summon";
@@ -16,48 +38,614 @@ import { MarketingPage, ReportsPage } from "@/components/app/reports";
 import { MaterialsPage, PurchasesPage } from "@/components/app/supplies";
 import { SettingsPage } from "@/components/app/settings";
 
-export const browserStateKey="print3d-operation-state";
+export const browserStateKey = "print3d-operation-state";
 
-export const browserBackupKey="print3d-operation-cloud-backup";
+export const browserBackupKey = "print3d-operation-cloud-backup";
 
-export const hasOperationalData=(value:AppState)=>["materials","suppliers","purchases","products","recipes","machines","maintenances","productionOrders","lots","customers","campaigns","orders","movements","payments","expenses","goals","calculations"].some(key=>(value as any)[key]?.length>0)||JSON.stringify(value.settings)!==JSON.stringify(emptyState.settings);
+export const hasOperationalData = (value: AppState) =>
+  [
+    "materials",
+    "suppliers",
+    "purchases",
+    "products",
+    "recipes",
+    "machines",
+    "maintenances",
+    "productionOrders",
+    "lots",
+    "customers",
+    "campaigns",
+    "orders",
+    "movements",
+    "payments",
+    "expenses",
+    "goals",
+    "calculations",
+  ].some((key) => (value as any)[key]?.length > 0) || JSON.stringify(value.settings) !== JSON.stringify(emptyState.settings);
 
-export const navigationModules=[
-  {id:"sales",label:"Vendas",icon:ClipboardList,defaultPage:"orders",items:[["orders","Pedidos",ClipboardList],["customers","Clientes",Users]]},
-  {id:"products",label:"Produtos",icon:Package,defaultPage:"catalog",items:[["catalog","Catálogo",Package],["calculator","Calculadora",Calculator]]},
-  {id:"production",label:"Produção",icon:Factory,defaultPage:"production",items:[["production","Kanban de produção",Factory],["stock","Estoque de produtos",Layers3],["machines","Máquinas",Printer]]},
-  {id:"supplies",label:"Insumos",icon:Boxes,defaultPage:"materials",items:[["materials","Materiais",Boxes],["purchases","Compras",ShoppingCart]]},
-  {id:"management",label:"Gestão",icon:BarChart3,defaultPage:"reports",items:[["finance","Financeiro",WalletCards],["marketing","Marketing",Megaphone],["reports","Relatórios",BarChart3]]},
-  {id:"settings",label:"Configurações",icon:Settings,defaultPage:"settings",items:[["settings","Parâmetros",SlidersHorizontal]]}
+export const navigationModules = [
+  {
+    id: "sales",
+    label: "Vendas",
+    icon: ClipboardList,
+    defaultPage: "orders",
+    items: [
+      ["orders", "Pedidos", ClipboardList],
+      ["customers", "Clientes", Users],
+    ],
+  },
+  {
+    id: "products",
+    label: "Produtos",
+    icon: Package,
+    defaultPage: "catalog",
+    items: [
+      ["catalog", "Catálogo", Package],
+      ["calculator", "Calculadora", Calculator],
+    ],
+  },
+  {
+    id: "production",
+    label: "Produção",
+    icon: Factory,
+    defaultPage: "production",
+    items: [
+      ["production", "Kanban de produção", Factory],
+      ["stock", "Estoque de produtos", Layers3],
+      ["machines", "Máquinas", Printer],
+    ],
+  },
+  {
+    id: "supplies",
+    label: "Insumos",
+    icon: Boxes,
+    defaultPage: "materials",
+    items: [
+      ["materials", "Materiais", Boxes],
+      ["purchases", "Compras", ShoppingCart],
+    ],
+  },
+  {
+    id: "management",
+    label: "Gestão",
+    icon: BarChart3,
+    defaultPage: "reports",
+    items: [
+      ["finance", "Financeiro", WalletCards],
+      ["marketing", "Marketing", Megaphone],
+      ["reports", "Relatórios", BarChart3],
+    ],
+  },
+  {
+    id: "settings",
+    label: "Configurações",
+    icon: Settings,
+    defaultPage: "settings",
+    items: [["settings", "Parâmetros", SlidersHorizontal]],
+  },
 ] as const;
 
-export const pageNavigation=[["dashboard","Dashboard",Gauge],...navigationModules.flatMap(module=>module.items)] as const;
+type NavItem = readonly [PageId, string, any];
+export const pageNavigation: readonly NavItem[] = [
+  ["dashboard", "Dashboard", Gauge],
+  ...navigationModules.flatMap((module) => module.items as readonly NavItem[]),
+];
 
-export const primaryMobile=["dashboard","orders","production","calculator"];
+export const primaryMobile = ["dashboard", "orders", "production", "calculator"];
 
-export function OperationsApp({user,signOut,initialPage="dashboard",initialRecord}:{user:string,signOut:string,initialPage?:PageId,initialRecord?:string}){
-  const[state,setState]=useState<AppState>(emptyState),[page,setPage]=useState<PageId>(initialPage),[record,setRecord]=useState<string|undefined>(initialRecord),[visitedPages,setVisitedPages]=useState<Set<PageId>>(()=>new Set([initialPage])),[version,setVersion]=useState(0),[localMode,setLocalMode]=useState(false),[storageMode,setStorageMode]=useState<"browser"|"d1"|"libsql">("browser"),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[more,setMore]=useState(false),[openModule,setOpenModule]=useState("sales"),[mobileModule,setMobileModule]=useState<string|null>(null),[globalSearch,setGlobalSearch]=useState(""),[loadError,setLoadError]=useState<{message:string;raw?:string}|null>(null),vr=useRef(0);
-  useEffect(()=>{(async()=>{try{const response=await fetch("/api/state",{cache:"no-store"}),d=await response.json();if(!response.ok)throw new Error(d.error||"Não foi possível acessar o armazenamento.");let source=hydrateState(d.state||emptyState),nextVersion=Number(d.version)||0;setStorageMode(d.storage||"browser");if(d.local){setLocalMode(true);const stored=localStorage.getItem(browserStateKey);if(stored){try{source=hydrateState(JSON.parse(stored))}catch{throw Object.assign(new Error("Os dados salvos neste navegador não puderam ser lidos. Nada foi alterado: baixe o arquivo para não perder o conteúdo e procure ajuda antes de continuar."),{raw:stored})}}}else{setLocalMode(false);const stored=localStorage.getItem(browserStateKey);let localState:AppState|undefined;try{localState=stored?hydrateState(JSON.parse(stored)):undefined}catch{localState=undefined}if(nextVersion===0&&!hasOperationalData(source)&&localState){if(hasOperationalData(localState)){const migration=await fetch("/api/state",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({state:localState,version:0,action:"backup-import",confirmImport:true,entityType:"migration",entityId:"browser"})}),result=await migration.json();if(!migration.ok)throw new Error(result.error||"Não foi possível migrar os dados locais.");source=localState;nextVersion=Number(result.version)||1;toast.success("Dados locais transferidos para o banco permanente.")}}try{localStorage.setItem(browserBackupKey,JSON.stringify(source))}catch{}}setState(source);vr.current=nextVersion;setVersion(nextVersion)}catch(error){setLoadError({message:error instanceof Error?error.message:"Não foi possível carregar os dados.",raw:(error as any)?.raw})}finally{setLoading(false)}})()},[]);
-  useEffect(()=>{const saved=sessionStorage.getItem("navigation-module");if(saved&&navigationModules.some(module=>module.id===saved))setOpenModule(saved)},[]);
-  useEffect(()=>{const module=navigationModules.find(module=>module.items.some(([id])=>id===page));if(module){setOpenModule(module.id);sessionStorage.setItem("navigation-module",module.id)}},[page]);
-  useEffect(()=>{const onPopState=()=>{const next=pageFromPath(window.location.pathname)||"dashboard";setPage(next);setRecord(recordFromPath(window.location.pathname));setVisitedPages(current=>new Set(current).add(next));setMore(false)};window.addEventListener("popstate",onPopState);return()=>window.removeEventListener("popstate",onPopState)},[]);
-  useEffect(()=>{document.title=`${pageTitles[page]} · Gestão de produção`;window.scrollTo({top:0,behavior:"instant" as ScrollBehavior})},[page]);
-  async function save(next:AppState,action:string){
-    const old=state;setState(next);setSaving(true);
-    if(localMode){try{localStorage.setItem(browserStateKey,JSON.stringify(next));vr.current+=1;setVersion(vr.current);setSaving(false);return true}catch(e:any){setState(old);setSaving(false);toast.error("O navegador não possui espaço para salvar os dados.");return false}}
-    try{const r=await fetch("/api/state",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({state:next,version:vr.current,action,confirmImport:action==="backup-import"})}),d=await r.json();if(!r.ok){if(d.conflict&&d.state){setState(hydrateState(d.state));vr.current=d.version;setVersion(d.version);toast.error(d.error||"Os dados foram alterados em outra sessão. A versão mais recente foi carregada; refaça a última ação.");return false}throw new Error(d.error||"Falha ao salvar")}vr.current=d.version;setVersion(d.version);try{localStorage.setItem(browserBackupKey,JSON.stringify(next))}catch{}return true}catch(e:any){setState(old);toast.error(e?.message||"Falha ao salvar");return false}finally{setSaving(false)}
+export function OperationsApp({
+  user,
+  signOut,
+  initialPage = "dashboard",
+  initialRecord,
+}: {
+  user: string;
+  signOut: string;
+  initialPage?: PageId;
+  initialRecord?: string;
+}) {
+  const [state, setState] = useState<AppState>(emptyState),
+    [page, setPage] = useState<PageId>(initialPage),
+    [record, setRecord] = useState<string | undefined>(initialRecord),
+    [visitedPages, setVisitedPages] = useState<Set<PageId>>(() => new Set([initialPage])),
+    [version, setVersion] = useState(0),
+    [localMode, setLocalMode] = useState(false),
+    [storageMode, setStorageMode] = useState<"browser" | "d1" | "libsql">("browser"),
+    [loading, setLoading] = useState(true),
+    [saving, setSaving] = useState(false),
+    [more, setMore] = useState(false),
+    [openModule, setOpenModule] = useState("sales"),
+    [mobileModule, setMobileModule] = useState<string | null>(null),
+    [globalSearch, setGlobalSearch] = useState(""),
+    [loadError, setLoadError] = useState<{ message: string; raw?: string } | null>(null),
+    vr = useRef(0);
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" }),
+          d = await response.json();
+        if (!response.ok) throw new Error(d.error || "Não foi possível acessar o armazenamento.");
+        let source = hydrateState(d.state || emptyState),
+          nextVersion = Number(d.version) || 0;
+        setStorageMode(d.storage || "browser");
+        if (d.local) {
+          setLocalMode(true);
+          const stored = localStorage.getItem(browserStateKey);
+          if (stored) {
+            try {
+              source = hydrateState(JSON.parse(stored));
+            } catch {
+              throw Object.assign(
+                new Error(
+                  "Os dados salvos neste navegador não puderam ser lidos. Nada foi alterado: baixe o arquivo para não perder o conteúdo e procure ajuda antes de continuar.",
+                ),
+                { raw: stored },
+              );
+            }
+          }
+        } else {
+          setLocalMode(false);
+          const stored = localStorage.getItem(browserStateKey);
+          let localState: AppState | undefined;
+          try {
+            localState = stored ? hydrateState(JSON.parse(stored)) : undefined;
+          } catch {
+            localState = undefined;
+          }
+          if (nextVersion === 0 && !hasOperationalData(source) && localState) {
+            if (hasOperationalData(localState)) {
+              const migration = await fetch("/api/state", {
+                  method: "PUT",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    state: localState,
+                    version: 0,
+                    action: "backup-import",
+                    confirmImport: true,
+                    entityType: "migration",
+                    entityId: "browser",
+                  }),
+                }),
+                result = await migration.json();
+              if (!migration.ok) throw new Error(result.error || "Não foi possível migrar os dados locais.");
+              source = localState;
+              nextVersion = Number(result.version) || 1;
+              toast.success("Dados locais transferidos para o banco permanente.");
+            }
+          }
+          try {
+            localStorage.setItem(browserBackupKey, JSON.stringify(source));
+          } catch {}
+        }
+        setState(source);
+        vr.current = nextVersion;
+        setVersion(nextVersion);
+      } catch (error) {
+        setLoadError({
+          message: error instanceof Error ? error.message : "Não foi possível carregar os dados.",
+          raw: (error as any)?.raw,
+        });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+  useEffect(() => {
+    const saved = sessionStorage.getItem("navigation-module");
+    if (saved && navigationModules.some((module) => module.id === saved)) setOpenModule(saved);
+  }, []);
+  useEffect(() => {
+    const module = navigationModules.find((module) => module.items.some(([id]) => id === page));
+    if (module) {
+      setOpenModule(module.id);
+      sessionStorage.setItem("navigation-module", module.id);
+    }
+  }, [page]);
+  useEffect(() => {
+    const onPopState = () => {
+      const next = pageFromPath(window.location.pathname) || "dashboard";
+      setPage(next);
+      setRecord(recordFromPath(window.location.pathname));
+      setVisitedPages((current) => new Set(current).add(next));
+      setMore(false);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    document.title = `${pageTitles[page]} · Gestão de produção`;
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [page]);
+  async function save(next: AppState, action: string) {
+    const old = state;
+    setState(next);
+    setSaving(true);
+    if (localMode) {
+      try {
+        localStorage.setItem(browserStateKey, JSON.stringify(next));
+        vr.current += 1;
+        setVersion(vr.current);
+        setSaving(false);
+        return true;
+      } catch (e: any) {
+        setState(old);
+        setSaving(false);
+        toast.error("O navegador não possui espaço para salvar os dados.");
+        return false;
+      }
+    }
+    try {
+      const r = await fetch("/api/state", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ state: next, version: vr.current, action, confirmImport: action === "backup-import" }),
+        }),
+        d = await r.json();
+      if (!r.ok) {
+        if (d.conflict && d.state) {
+          setState(hydrateState(d.state));
+          vr.current = d.version;
+          setVersion(d.version);
+          toast.error(
+            d.error || "Os dados foram alterados em outra sessão. A versão mais recente foi carregada; refaça a última ação.",
+          );
+          return false;
+        }
+        throw new Error(d.error || "Falha ao salvar");
+      }
+      vr.current = d.version;
+      setVersion(d.version);
+      try {
+        localStorage.setItem(browserBackupKey, JSON.stringify(next));
+      } catch {}
+      return true;
+    } catch (e: any) {
+      setState(old);
+      toast.error(e?.message || "Falha ao salvar");
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }
-  function navigate(nextPage:string){const next=(nextPage in pageTitles?nextPage:"dashboard") as PageId,path=pathForPage(next);if(window.location.pathname!==path)window.history.pushState({page:next},"",path);setPage(next);setRecord(undefined);setVisitedPages(current=>new Set(current).add(next));setMore(false);const module=navigationModules.find(module=>module.items.some(([id])=>id===next));if(module){setOpenModule(module.id);sessionStorage.setItem("navigation-module",module.id)}}
-  function navigateRecord(nextPage:PageId,nextRecord?:string){if(!nextRecord)return navigate(nextPage);const path=pathForRecord(nextPage,nextRecord);if(window.location.pathname!==path)window.history.pushState({page:nextPage,record:nextRecord},"",path);setPage(nextPage);setRecord(nextRecord);setVisitedPages(current=>new Set(current).add(nextPage));setMore(false)}
-  if(loading)return <main className="loading"><div className="loader"/><span>Carregando operação…</span></main>;
-  if(loadError)return <main className="loading load-error" role="alert"><AlertTriangle/><strong>Não foi possível abrir a operação</strong><span>{loadError.message}</span><div className="load-error-actions"><Button onClick={()=>window.location.reload()}>Tentar de novo</Button>{loadError.raw&&<Button variant="outline" onClick={()=>{const a=document.createElement("a"),u=URL.createObjectURL(new Blob([loadError.raw!],{type:"application/json"}));a.href=u;a.download=`dados-navegador-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}}><Download/>Baixar dados salvos</Button>}</div></main>;
-  const pages={dashboard:<Dashboard state={state} navigate={navigate} navigateRecord={navigateRecord}/>,calculator:<CalculatorPage state={state} save={save} saving={saving}/>,materials:<MaterialsPage state={state} save={save} saving={saving} initialMaterialRef={page==="materials"?record:undefined}/>,purchases:<PurchasesPage state={state} save={save} saving={saving}/>,production:<ProductionPage state={state} save={save} saving={saving} initialProductionRef={page==="production"?record:undefined}/>,catalog:<CatalogPage state={state} save={save} saving={saving} navigate={navigate} initialProductRef={page==="catalog"?record:undefined} onProductRefChange={value=>navigateRecord("catalog",value)}/>,stock:<StockPage state={state} save={save} saving={saving}/>,customers:<CustomersPage state={state} save={save} saving={saving}/>,orders:<OrdersPage state={state} save={save} saving={saving} initialOrderRef={page==="orders"?record:undefined} onOrderRefChange={value=>navigateRecord("orders",value)}/>,finance:<FinancePage state={state} save={save} saving={saving}/>,marketing:<MarketingPage state={state} save={save} saving={saving}/>,reports:<ReportsPage state={state}/>,machines:<MachinesPage state={state} save={save} saving={saving}/>,settings:<SettingsPage state={state} save={save} saving={saving}/>};
-  const searchHits=globalSearch.length>1?[...state.products.map(x=>({page:"catalog" as PageId,record:x.sku,title:x.name,meta:x.sku})),...state.orders.map(x=>({page:"orders" as PageId,record:x.number,title:x.number,meta:x.customerName})),...state.customers.map(x=>({page:"customers" as PageId,title:x.name,meta:x.phone||x.email})),...state.materials.map(x=>({page:"materials" as PageId,title:`${x.type} ${x.color}`,meta:x.brand}))].filter(x=>normalize(x.title+" "+x.meta).includes(normalize(globalSearch))).slice(0,8):[];
-  return <div className="app-shell">
-    <header className="topbar"><div className="neutral-mark"><Layers3/></div><div className="topbar-title"><strong>Gestão de produção</strong><small>Operação de impressão 3D</small></div><div className="global-search"><Search/><Input aria-label="Busca global" value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} placeholder="Buscar produto, pedido, cliente ou material"/>{searchHits.length>0&&<div className="global-results">{searchHits.map((x,i)=><button key={i} onClick={()=>{x.record?navigateRecord(x.page,x.record):navigate(x.page);setGlobalSearch("")}}><b>{x.title}</b><small>{x.meta}</small></button>)}</div>}</div><div className="topbar-user"><span className={`storage-status ${localMode?"storage-local":"storage-cloud"}`} title={localMode?"Os dados estão salvos somente neste navegador":"Os dados estão salvos fora do deploy e permanecem após atualizações"}>{localMode?"Somente neste navegador":storageMode==="d1"?"Banco permanente":"Banco permanente"}</span><span>{user}</span><span>v{version}</span><a href={signOut} target="_top">Sair</a></div></header>
-    <aside className="sidebar"><nav aria-label="Navegação principal"><div className="sidebar-main"><button onClick={()=>navigate("dashboard")} className={`sidebar-dashboard ${page==="dashboard"?"active":""}`} aria-current={page==="dashboard"?"page":undefined}><Gauge/><span>Dashboard</span></button>{navigationModules.filter(module=>module.id!=="settings").map(module=>{const ModuleIcon=module.icon,isOpen=openModule===module.id,isActive=module.items.some(([id])=>id===page);return <div className={`nav-module ${isActive?"module-active":""}`} key={module.id}><button className="nav-module-toggle" onClick={()=>navigate(module.defaultPage)} aria-expanded={isOpen} aria-controls={`desktop-module-${module.id}`}><ModuleIcon/><span>{module.label}</span><ChevronDown className="nav-chevron"/></button><div id={`desktop-module-${module.id}`} className="nav-module-items" hidden={!isOpen}>{module.items.map(([id,label,Icon])=><button key={id} onClick={()=>navigate(id)} className={page===id?"active":""} aria-current={page===id?"page":undefined}><Icon/><span>{label}</span></button>)}</div></div>})}</div>{navigationModules.filter(module=>module.id==="settings").map(module=>{const ModuleIcon=module.icon,isOpen=openModule===module.id,isActive=module.items.some(([id])=>id===page);return <div className={`nav-module sidebar-settings ${isActive?"module-active":""}`} key={module.id}><button className="nav-module-toggle" onClick={()=>navigate(module.defaultPage)} aria-expanded={isOpen} aria-controls="desktop-module-settings"><ModuleIcon/><span>{module.label}</span><ChevronDown className="nav-chevron"/></button><div id="desktop-module-settings" className="nav-module-items" hidden={!isOpen}>{module.items.map(([id,label,Icon])=><button key={id} onClick={()=>navigate(id)} className={page===id?"active":""} aria-current={page===id?"page":undefined}><Icon/><span>{label}</span></button>)}</div></div>})}</nav></aside>
-    <main className="content">{localMode&&<div className="storage-warning"><AlertTriangle/><div><strong>Armazenamento permanente ainda não conectado</strong><span>Os dados estão somente neste navegador. Conecte o banco da produção antes de iniciar o uso definitivo.</span></div></div>}{Object.entries(pages).filter(([id])=>visitedPages.has(id as PageId)).map(([id,node])=><section key={id} hidden={page!==id} className="page">{node}</section>)}</main>
-    <nav className="mobile-nav" aria-label="Acessos rápidos">{pageNavigation.filter(([id])=>primaryMobile.includes(id)).sort((a,b)=>primaryMobile.indexOf(a[0])-primaryMobile.indexOf(b[0])).map(([id,label,Icon])=><button key={id} onClick={()=>navigate(id)} className={page===id?"active":""} aria-current={page===id?"page":undefined}><Icon/><span>{id==="production"?"Produção":label}</span></button>)}<button onClick={()=>{const next=!more;setMore(next);if(next){const active=navigationModules.find(module=>module.items.some(([id])=>id===page));setMobileModule(active?.id||null)}}} className={more?"active":""} aria-expanded={more} aria-controls="mobile-more-menu"><Menu/><span>Mais</span></button></nav>
-    {more&&<div className="mobile-more" id="mobile-more-menu"><div className="mobile-more-head"><strong>Áreas do sistema</strong><button aria-label="Fechar menu" onClick={()=>setMore(false)}><X/></button></div>{navigationModules.map(module=>{const ModuleIcon=module.icon,isOpen=mobileModule===module.id,isActive=module.items.some(([id])=>id===page),secondaryItems=module.items.filter(([id])=>!primaryMobile.includes(id));if(!secondaryItems.length)return null;return <div className={`mobile-module ${isActive?"module-active":""}`} key={module.id}><button className="mobile-module-toggle" onClick={()=>setMobileModule(isOpen?null:module.id)} aria-expanded={isOpen} aria-controls={`mobile-module-${module.id}`}><ModuleIcon/><span>{module.label}</span><ChevronDown/></button><div className="mobile-module-items" id={`mobile-module-${module.id}`} hidden={!isOpen}>{secondaryItems.map(([id,label,Icon])=><button key={id} onClick={()=>navigate(id)} className={page===id?"active":""} aria-current={page===id?"page":undefined}><Icon/><span>{label}</span></button>)}</div></div>})}</div>}
-  </div>
+  function navigate(nextPage: string) {
+    const next = (nextPage in pageTitles ? nextPage : "dashboard") as PageId,
+      path = pathForPage(next);
+    if (window.location.pathname !== path) window.history.pushState({ page: next }, "", path);
+    setPage(next);
+    setRecord(undefined);
+    setVisitedPages((current) => new Set(current).add(next));
+    setMore(false);
+    const module = navigationModules.find((module) => module.items.some(([id]) => id === next));
+    if (module) {
+      setOpenModule(module.id);
+      sessionStorage.setItem("navigation-module", module.id);
+    }
+  }
+  function navigateRecord(nextPage: PageId, nextRecord?: string) {
+    if (!nextRecord) return navigate(nextPage);
+    const path = pathForRecord(nextPage, nextRecord);
+    if (window.location.pathname !== path) window.history.pushState({ page: nextPage, record: nextRecord }, "", path);
+    setPage(nextPage);
+    setRecord(nextRecord);
+    setVisitedPages((current) => new Set(current).add(nextPage));
+    setMore(false);
+  }
+  if (loading)
+    return (
+      <main className="loading">
+        <div className="loader" />
+        <span>Carregando operação…</span>
+      </main>
+    );
+  if (loadError)
+    return (
+      <main className="loading load-error" role="alert">
+        <AlertTriangle />
+        <strong>Não foi possível abrir a operação</strong>
+        <span>{loadError.message}</span>
+        <div className="load-error-actions">
+          <Button onClick={() => window.location.reload()}>Tentar de novo</Button>
+          {loadError.raw && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                const a = document.createElement("a"),
+                  u = URL.createObjectURL(new Blob([loadError.raw!], { type: "application/json" }));
+                a.href = u;
+                a.download = `dados-navegador-${today()}.json`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(u), 1000);
+              }}
+            >
+              <Download />
+              Baixar dados salvos
+            </Button>
+          )}
+        </div>
+      </main>
+    );
+  const pages = {
+    dashboard: <Dashboard state={state} navigate={navigate} navigateRecord={navigateRecord} />,
+    calculator: <CalculatorPage state={state} save={save} saving={saving} />,
+    materials: (
+      <MaterialsPage state={state} save={save} saving={saving} initialMaterialRef={page === "materials" ? record : undefined} />
+    ),
+    purchases: <PurchasesPage state={state} save={save} saving={saving} />,
+    production: (
+      <ProductionPage
+        state={state}
+        save={save}
+        saving={saving}
+        initialProductionRef={page === "production" ? record : undefined}
+      />
+    ),
+    catalog: (
+      <CatalogPage
+        state={state}
+        save={save}
+        saving={saving}
+        navigate={navigate}
+        initialProductRef={page === "catalog" ? record : undefined}
+        onProductRefChange={(value) => navigateRecord("catalog", value)}
+      />
+    ),
+    stock: <StockPage state={state} save={save} saving={saving} />,
+    customers: <CustomersPage state={state} save={save} saving={saving} />,
+    orders: (
+      <OrdersPage
+        state={state}
+        save={save}
+        saving={saving}
+        initialOrderRef={page === "orders" ? record : undefined}
+        onOrderRefChange={(value) => navigateRecord("orders", value)}
+      />
+    ),
+    finance: <FinancePage state={state} save={save} saving={saving} />,
+    marketing: <MarketingPage state={state} save={save} saving={saving} />,
+    reports: <ReportsPage state={state} />,
+    machines: <MachinesPage state={state} save={save} saving={saving} />,
+    settings: <SettingsPage state={state} save={save} saving={saving} />,
+  };
+  const searchHits: { page: PageId; record?: string; title: string; meta: string }[] =
+    globalSearch.length > 1
+      ? [
+          ...state.products.map((x) => ({ page: "catalog" as PageId, record: x.sku, title: x.name, meta: x.sku })),
+          ...state.orders.map((x) => ({ page: "orders" as PageId, record: x.number, title: x.number, meta: x.customerName })),
+          ...state.customers.map((x) => ({ page: "customers" as PageId, title: x.name, meta: x.phone || x.email })),
+          ...state.materials.map((x) => ({ page: "materials" as PageId, title: `${x.type} ${x.color}`, meta: x.brand })),
+        ]
+          .filter((x) => normalize(x.title + " " + x.meta).includes(normalize(globalSearch)))
+          .slice(0, 8)
+      : [];
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="neutral-mark">
+          <Layers3 />
+        </div>
+        <div className="topbar-title">
+          <strong>Gestão de produção</strong>
+          <small>Operação de impressão 3D</small>
+        </div>
+        <div className="global-search">
+          <Search />
+          <Input
+            aria-label="Busca global"
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            placeholder="Buscar produto, pedido, cliente ou material"
+          />
+          {searchHits.length > 0 && (
+            <div className="global-results">
+              {searchHits.map((x, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    x.record ? navigateRecord(x.page, x.record) : navigate(x.page);
+                    setGlobalSearch("");
+                  }}
+                >
+                  <b>{x.title}</b>
+                  <small>{x.meta}</small>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="topbar-user">
+          <span
+            className={`storage-status ${localMode ? "storage-local" : "storage-cloud"}`}
+            title={
+              localMode
+                ? "Os dados estão salvos somente neste navegador"
+                : "Os dados estão salvos fora do deploy e permanecem após atualizações"
+            }
+          >
+            {localMode ? "Somente neste navegador" : storageMode === "d1" ? "Banco permanente" : "Banco permanente"}
+          </span>
+          <span>{user}</span>
+          <span>v{version}</span>
+          <a href={signOut} target="_top">
+            Sair
+          </a>
+        </div>
+      </header>
+      <aside className="sidebar">
+        <nav aria-label="Navegação principal">
+          <div className="sidebar-main">
+            <button
+              onClick={() => navigate("dashboard")}
+              className={`sidebar-dashboard ${page === "dashboard" ? "active" : ""}`}
+              aria-current={page === "dashboard" ? "page" : undefined}
+            >
+              <Gauge />
+              <span>Dashboard</span>
+            </button>
+            {navigationModules
+              .filter((module) => module.id !== "settings")
+              .map((module) => {
+                const ModuleIcon = module.icon,
+                  isOpen = openModule === module.id,
+                  isActive = module.items.some(([id]) => id === page);
+                return (
+                  <div className={`nav-module ${isActive ? "module-active" : ""}`} key={module.id}>
+                    <button
+                      className="nav-module-toggle"
+                      onClick={() => navigate(module.defaultPage)}
+                      aria-expanded={isOpen}
+                      aria-controls={`desktop-module-${module.id}`}
+                    >
+                      <ModuleIcon />
+                      <span>{module.label}</span>
+                      <ChevronDown className="nav-chevron" />
+                    </button>
+                    <div id={`desktop-module-${module.id}`} className="nav-module-items" hidden={!isOpen}>
+                      {module.items.map(([id, label, Icon]) => (
+                        <button
+                          key={id}
+                          onClick={() => navigate(id)}
+                          className={page === id ? "active" : ""}
+                          aria-current={page === id ? "page" : undefined}
+                        >
+                          <Icon />
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          {navigationModules
+            .filter((module) => module.id === "settings")
+            .map((module) => {
+              const ModuleIcon = module.icon,
+                isOpen = openModule === module.id,
+                isActive = module.items.some(([id]) => id === page);
+              return (
+                <div className={`nav-module sidebar-settings ${isActive ? "module-active" : ""}`} key={module.id}>
+                  <button
+                    className="nav-module-toggle"
+                    onClick={() => navigate(module.defaultPage)}
+                    aria-expanded={isOpen}
+                    aria-controls="desktop-module-settings"
+                  >
+                    <ModuleIcon />
+                    <span>{module.label}</span>
+                    <ChevronDown className="nav-chevron" />
+                  </button>
+                  <div id="desktop-module-settings" className="nav-module-items" hidden={!isOpen}>
+                    {module.items.map(([id, label, Icon]) => (
+                      <button
+                        key={id}
+                        onClick={() => navigate(id)}
+                        className={page === id ? "active" : ""}
+                        aria-current={page === id ? "page" : undefined}
+                      >
+                        <Icon />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+        </nav>
+      </aside>
+      <main className="content">
+        {localMode && (
+          <div className="storage-warning">
+            <AlertTriangle />
+            <div>
+              <strong>Armazenamento permanente ainda não conectado</strong>
+              <span>Os dados estão somente neste navegador. Conecte o banco da produção antes de iniciar o uso definitivo.</span>
+            </div>
+          </div>
+        )}
+        {Object.entries(pages)
+          .filter(([id]) => visitedPages.has(id as PageId))
+          .map(([id, node]) => (
+            <section key={id} hidden={page !== id} className="page">
+              {node}
+            </section>
+          ))}
+      </main>
+      <nav className="mobile-nav" aria-label="Acessos rápidos">
+        {pageNavigation
+          .filter(([id]) => primaryMobile.includes(id))
+          .sort((a, b) => primaryMobile.indexOf(a[0]) - primaryMobile.indexOf(b[0]))
+          .map(([id, label, Icon]) => (
+            <button
+              key={id}
+              onClick={() => navigate(id)}
+              className={page === id ? "active" : ""}
+              aria-current={page === id ? "page" : undefined}
+            >
+              <Icon />
+              <span>{id === "production" ? "Produção" : label}</span>
+            </button>
+          ))}
+        <button
+          onClick={() => {
+            const next = !more;
+            setMore(next);
+            if (next) {
+              const active = navigationModules.find((module) => module.items.some(([id]) => id === page));
+              setMobileModule(active?.id || null);
+            }
+          }}
+          className={more ? "active" : ""}
+          aria-expanded={more}
+          aria-controls="mobile-more-menu"
+        >
+          <Menu />
+          <span>Mais</span>
+        </button>
+      </nav>
+      {more && (
+        <div className="mobile-more" id="mobile-more-menu">
+          <div className="mobile-more-head">
+            <strong>Áreas do sistema</strong>
+            <button aria-label="Fechar menu" onClick={() => setMore(false)}>
+              <X />
+            </button>
+          </div>
+          {navigationModules.map((module) => {
+            const ModuleIcon = module.icon,
+              isOpen = mobileModule === module.id,
+              isActive = module.items.some(([id]) => id === page),
+              secondaryItems = module.items.filter(([id]) => !primaryMobile.includes(id));
+            if (!secondaryItems.length) return null;
+            return (
+              <div className={`mobile-module ${isActive ? "module-active" : ""}`} key={module.id}>
+                <button
+                  className="mobile-module-toggle"
+                  onClick={() => setMobileModule(isOpen ? null : module.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={`mobile-module-${module.id}`}
+                >
+                  <ModuleIcon />
+                  <span>{module.label}</span>
+                  <ChevronDown />
+                </button>
+                <div className="mobile-module-items" id={`mobile-module-${module.id}`} hidden={!isOpen}>
+                  {secondaryItems.map(([id, label, Icon]) => (
+                    <button
+                      key={id}
+                      onClick={() => navigate(id)}
+                      className={page === id ? "active" : ""}
+                      aria-current={page === id ? "page" : undefined}
+                    >
+                      <Icon />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }

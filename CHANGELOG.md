@@ -1,5 +1,35 @@
 # Mudanças
 
+## Fase 4 · Organizar o código (24/10/2026)
+
+Nada muda no uso do sistema, exceto os três ajustes visuais no fim desta lista. O objetivo é deixar as próximas mudanças mais seguras.
+
+**Só Vercel**
+- Removido tudo do Cloudflare (vinext, Wrangler, D1, R2, migrações Drizzle, plugin do ChatGPT Sites). `pnpm dev`, `pnpm build` e `pnpm start` agora são os comandos padrão do Next.js.
+- Login por senha em qualquer ambiente, inclusive no computador (`.env.local`). Os dados continuam ligados ao mesmo dono.
+- Fotos de produto são reduzidas no navegador (lado maior 900 px, WebP) antes de salvar: uma foto de celular de 3 MB vira cerca de 60 KB.
+- Conexão com o Turso tenta de novo depois de uma falha, em vez de ficar presa no erro até o servidor reiniciar.
+
+**Servidor mais rigoroso**
+- Antes de gravar, a API confere se a gravação criou alguma incoerência nova: estoque do produto diferente da soma dos lotes, lote com saldo inválido, filamento negativo, recebimento que não bate com as parcelas, conta sem valor, pedido, SKU ou OP repetidos. Dados antigos já incoerentes não bloqueiam o uso.
+- Limite de 8 MB por gravação, com mensagem clara.
+- Índices por usuário em 14 tabelas que eram lidas por inteiro.
+
+**Código**
+- A interface, que era um arquivo de 180 KB, foi dividida por área em `components/app/` (painel, vendas, produtos, produção, insumos, financeiro, relatórios, parâmetros e componentes comuns), formatada e sem `@ts-nocheck`.
+- Criar pedido e registrar compra viraram funções testadas em `lib/operations.ts`.
+- Removidos o painel antigo (sem uso) e 54 componentes visuais sem uso.
+- Novos scripts: `pnpm typecheck`. README reescrito.
+
+**Correções encontradas no caminho**
+- Desconto por item era ignorado ao criar o pedido: o valor a receber e o imposto saíam maiores até a conclusão da venda.
+- O painel de produto, feito para abrir como gaveta à direita, abria deslocado e cortado no topo (o Tailwind 4 desloca com `translate`, que a regra antiga não anulava).
+- Situações aparecem em português e com acento (Orçamento, Concluído, Ativo, Em manutenção) em vez de "Orcamento" ou "Active".
+
+**Testes**
+- 7 testes novos (pedido, compra e conferência do servidor). Total: 54 testes de regra, mais o de persistência, que exige as dependências instaladas.
+- Roteiro no navegador com 12 operações (calculadora, ficha técnica, pedido do orçamento à venda, produção, compra parcelada, financeiro, parâmetros, todas as telas e celular) com resultado idêntico antes e depois da reorganização.
+
 ## Fase 3 · Completar o financeiro (23/10/2026)
 
 **Tela do Financeiro, refeita**
