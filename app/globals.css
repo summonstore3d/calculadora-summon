@@ -206,3 +206,9 @@ button.finance-account:hover{border-color:#b9c7dc}
 .slicer-result>div:first-child{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .slicer-result select{max-width:140px}
 .slicer-result-actions{display:flex;gap:8px}
+.catalog-card-title{align-items:center!important}
+.catalog-card-title>span:not(.product-thumb):not([data-slot=badge]){flex:1}
+.product-thumb{flex:none;display:grid;place-items:center;overflow:hidden;border-radius:10px;background:#eef2f7;color:#344054;font-size:17px;font-weight:700;letter-spacing:.02em}
+.product-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.catalog-card-title>.badge,.catalog-card-title>[data-slot=badge]{flex:none;width:auto;padding-inline:8px}
+.catalog-card-title b{white-space:normal!important;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25}

@@ -875,17 +875,17 @@ export function CatalogPage({
                 onProductRefChange(p.sku);
               }}
             >
-              <div className="catalog-card-image">
-                {p.imageUrl ? <img src={p.imageUrl} alt={p.name} /> : <Package />}
-                <Badge variant={low ? "destructive" : "secondary"}>{p.readyStock} un</Badge>
-              </div>
               <div className="catalog-card-body">
                 <div className="catalog-card-title">
+                  <ProductThumb product={p} />
                   <span>
                     <b>{p.name}</b>
-                    <small>{p.sku}</small>
+                    <small>
+                      {p.sku}
+                      {p.status !== "active" && ` · ${statusLabel(p.status)}`}
+                    </small>
                   </span>
-                  <Badge variant={p.status === "active" ? "secondary" : "outline"}>{statusLabel(p.status)}</Badge>
+                  <Badge variant={low ? "destructive" : "secondary"}>{p.readyStock} un</Badge>
                 </div>
                 <div className="catalog-card-classification">
                   <span>{p.category}</span>
@@ -1877,5 +1877,29 @@ export function SlicerImport({ state, onApply }: { state: AppState; onApply: (in
         </div>
       )}
     </div>
+  );
+}
+
+const THUMB_COLORS = ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe", "#ccfbf1", "#ffedd5"];
+
+/** Miniatura do produto para reconhecer na lista. Sem foto, mostra as iniciais sobre uma cor fixa por produto. */
+export function ProductThumb({ product, size = 56 }: { product: Pick<Product, "name" | "imageUrl" | "id">; size?: number }) {
+  const initials =
+    product.name
+      .split(/\s+/)
+      .filter((word) => word.length > 2 || /^[A-Z0-9]/.test(word))
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase() || product.name.slice(0, 1).toUpperCase();
+  const color = THUMB_COLORS[[...product.id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % THUMB_COLORS.length];
+  return (
+    <span
+      className="product-thumb"
+      style={{ width: size, height: size, background: product.imageUrl ? undefined : color }}
+      aria-hidden="true"
+    >
+      {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : initials}
+    </span>
   );
 }
