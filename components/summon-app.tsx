@@ -300,6 +300,9 @@ export function OperationsApp({
       }
       vr.current = d.version;
       setVersion(d.version);
+      // O servidor separou alguma foto embutida: passa a usar a versão com o endereço curto.
+      if (d.state) next = hydrateState(d.state);
+      if (d.state) setState(next);
       try {
         localStorage.setItem(browserBackupKey, JSON.stringify(next));
       } catch {}

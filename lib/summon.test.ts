@@ -180,3 +180,12 @@ test("inventário de produto ajusta lote, saldo agregado e histórico",()=>{
   assert.equal(state.movements.at(-1)?.kind,"inventory-adjustment");
   assert.throws(()=>adjustProductStock(state,state.lots[0].id,{operation:"remove",quantity:2,reason:"Erro"}));
 });
+
+test("editar produto mantém a foto, troca ou remove quando pedido", async () => {
+  const { updateProduct } = await import("./summon.ts");
+  const keep = { name: "X", sku: "X1", description: "", category: "C", universe: "", tags: [], dimensions: "", leadDays: 1, minimumStock: 0, fulfillment: "ready" as const, status: "active" as const };
+  const state: any = { products: [{ id: "p", sku: "X1", name: "X", imageUrl: "/api/imagens/" + "1".repeat(32) }] };
+  assert.equal(updateProduct(state, "p", keep).products[0].imageUrl, "/api/imagens/" + "1".repeat(32));
+  assert.equal(updateProduct(state, "p", { ...keep, imageUrl: "/api/imagens/" + "2".repeat(32) }).products[0].imageUrl, "/api/imagens/" + "2".repeat(32));
+  assert.equal(updateProduct(state, "p", { ...keep, imageUrl: undefined }).products[0].imageUrl, undefined);
+});

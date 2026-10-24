@@ -4,6 +4,7 @@ import { PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { AppState, Product } from "@/lib/summon";
 
 export const n = (f: FormData, k: string) => Number(f.get(k)) || 0;
 
@@ -115,6 +116,47 @@ export async function compressImage(file: File): Promise<string> {
   return canvas.toDataURL("image/webp", 0.82);
 }
 
+/**
+ * Guarda a foto no servidor e devolve o endereço curto para o produto.
+ * Sem banco (modo "só neste navegador") ou sem conexão com o servidor de fotos, a foto continua embutida.
+ */
+export async function uploadImage(dataUrl: string): Promise<string> {
+  if (!dataUrl.startsWith("data:image/")) return dataUrl;
+  const blob = await (await fetch(dataUrl)).blob();
+  let response: Response;
+  try {
+    response = await fetch("/api/imagens", { method: "POST", headers: { "content-type": blob.type }, body: blob });
+  } catch {
+    throw new Error("Sem conexão para enviar a foto. Tente de novo.");
+  }
+  if (response.status === 501 || response.status === 404) return dataUrl;
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.url) throw new Error(result.error || "Não foi possível enviar a foto.");
+  return String(result.url);
+}
+
+/** Reduz a foto escolhida e envia ao servidor. */
+export async function productImage(file: File) {
+  return uploadImage(await compressImage(file));
+}
+
+/** Antes de importar um backup: envia as fotos uma a uma, para a gravação dos dados não passar do limite. */
+export async function uploadInlineImages(state: AppState, onProgress?: (done: number, total: number) => void) {
+  const pending = state.products.filter((p) => p.imageUrl?.startsWith("data:image/"));
+  if (!pending.length) return state;
+  const urls = new Map<string, string>();
+  let done = 0;
+  for (const product of pending) {
+    const source = product.imageUrl!;
+    if (!urls.has(source)) urls.set(source, await uploadImage(source));
+    onProgress?.(++done, pending.length);
+  }
+  return {
+    ...state,
+    products: state.products.map((p) => (p.imageUrl && urls.has(p.imageUrl) ? { ...p, imageUrl: urls.get(p.imageUrl) } : p)),
+  };
+}
+
 export function PageHead({ title, description, action }: { title: string; description: string; action?: any }) {
   return (
     <div className="page-head">
@@ -215,4 +257,29 @@ export function downloadCsv(filename: string, rows: (string | number)[][]) {
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** Miniatura do produto: a foto, ou as iniciais num fundo de cor fixa por produto. */
+const THUMB_COLORS = ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe", "#ccfbf1", "#ffedd5"];
+
+/** Miniatura do produto para reconhecer na lista. Sem foto, mostra as iniciais sobre uma cor fixa por produto. */
+export function ProductThumb({ product, size = 56 }: { product: Pick<Product, "name" | "imageUrl" | "id">; size?: number }) {
+  const initials =
+    product.name
+      .split(/\s+/)
+      .filter((word) => word.length > 2 || /^[A-Z0-9]/.test(word))
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase() || product.name.slice(0, 1).toUpperCase();
+  const color = THUMB_COLORS[[...product.id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % THUMB_COLORS.length];
+  return (
+    <span
+      className="product-thumb"
+      style={{ width: size, height: size, background: product.imageUrl ? undefined : color }}
+      aria-hidden="true"
+    >
+      {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : initials}
+    </span>
+  );
 }

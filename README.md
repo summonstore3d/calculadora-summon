@@ -31,11 +31,29 @@ Abra http://localhost:3000 e entre com a senha definida em `APP_PASSWORD`. Sem a
    - `APP_PASSWORD`: a senha de acesso ao sistema (obrigatória; sem ela ninguém entra).
    - `APP_SESSION_SECRET`: opcional, um texto longo e aleatório. Sem ele, a própria senha assina a sessão, e trocar a senha desconecta todo mundo.
    - `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`: o banco onde os dados ficam guardados.
+   - `BACKUP_SECRET`: opcional, para a cópia semanal automática (veja "Backup").
 3. Faça o deploy. As tabelas e os índices são criados sozinhos no primeiro acesso.
 4. Entre no sistema e confira que o topo mostra **Banco permanente**.
 5. Em **Configurações → Parâmetros**, informe o saldo inicial do caixa, revise taxas, imposto e prazos de repasse, e preencha os dados da empresa que aparecem no orçamento.
 
 Se você já usava o sistema só no navegador, o primeiro acesso com o banco vazio transfere esses dados para o banco automaticamente.
+
+## Fotos dos produtos
+
+As fotos ficam numa tabela própria no Turso, e o produto guarda só o endereço (`/api/imagens/...`). Assim cada gravação dos dados continua pequena: a Vercel recusa envios acima de 4,5 MB, e com as fotos embutidas esse limite chegaria com algumas dezenas de produtos. Fotos cadastradas antes dessa mudança são separadas sozinhas na primeira abertura do sistema.
+
+O endereço de uma foto abre sem senha, porque ela também aparece no orçamento público. Ele é aleatório (128 bits), então só quem recebeu o link consegue abrir.
+
+## Backup
+
+- **Na hora:** Configurações → Exportar backup. O arquivo leva os dados e as fotos, e pode ser importado em Configurações → Importar backup.
+- **Automático, toda segunda às 6h:** o GitHub baixa o backup e guarda por 90 dias, na aba **Actions → Backup semanal** (cada execução tem o arquivo para baixar em "Artifacts"). Para ligar:
+  1. Gere um texto aleatório com pelo menos 24 caracteres (por exemplo, `openssl rand -hex 24`).
+  2. Na Vercel, cadastre esse texto como `BACKUP_SECRET` e faça um novo deploy.
+  3. No GitHub, em **Settings → Secrets and variables → Actions**, crie `BACKUP_SECRET` com o mesmo texto e `APP_URL` com o endereço de produção (ex.: `https://gestao3d.vercel.app`).
+  4. Em **Actions → Backup semanal → Run workflow**, rode uma vez para conferir.
+
+  A cópia automática só roda em repositório **privado**: num repositório público, qualquer pessoa conseguiria baixar o arquivo. Ela também apaga fotos que nenhum produto usa há mais de 30 dias.
 
 ## Testes e conferência
 
@@ -44,7 +62,7 @@ pnpm test        # regras de custo, estoque, produção, vendas, financeiro, log
 pnpm typecheck   # confere os tipos de todo o projeto
 ```
 
-O build da Vercel não para por erro de tipo (`typescript.ignoreBuildErrors` em `next.config.ts`), para que um detalhe de tipagem não derrube uma publicação. Rode `pnpm typecheck` antes de publicar mudanças no código.
+O build da Vercel não para por erro de tipo (`typescript.ignoreBuildErrors` em `next.config.ts`), para que um detalhe de tipagem não derrube uma publicação. Em compensação, o GitHub roda `pnpm typecheck` e `pnpm test` a cada envio (`.github/workflows/verificacao.yml`): um ✗ vermelho ao lado do commit mostra que algo quebrou, antes de você precisar descobrir pelo sistema.
 
 ## Como o código está organizado
 
@@ -58,9 +76,12 @@ O build da Vercel não para por erro de tipo (`typescript.ignoreBuildErrors` em 
 | `lib/restock.ts` | Lista de reabastecimento |
 | `lib/slicer.ts` | Leitura de G-code e 3MF fatiado |
 | `lib/quote.ts` | Orçamento para o cliente |
+| `lib/images.ts` | Fotos dos produtos: validação, separação dos dados e volta para o backup |
 | `components/summon-app.tsx` | Estrutura do app: menu, carregamento e gravação dos dados |
 | `components/app/*.tsx` | Uma pasta por área: `dashboard`, `sales`, `products`, `production`, `supplies`, `finance`, `reports`, `settings` e `shared` (campos, tabelas e cartões comuns) |
 | `app/api/state` | API que lê e grava os dados no Turso |
+| `app/api/imagens` | Envio e entrega das fotos dos produtos |
+| `app/api/backup` | Backup completo, para o botão de exportar e para a cópia semanal |
 | `app/entrar`, `app/api/sessao` | Login por senha |
 | `app/o/[token]` | Página pública do orçamento (sem senha, só com o link; some quando o link é desativado) |
 | `db/` | Acesso ao Turso, tabelas e índices |

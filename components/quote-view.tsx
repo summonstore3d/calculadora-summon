@@ -43,8 +43,13 @@ export function QuoteView({ quote }: { quote: Quote }) {
           {quote.items.map((item, index) => (
             <tr key={index}>
               <td>
-                {item.name}
-                {item.discount > 0 && <small>Desconto de {money(item.discount)}</small>}
+                <div className="quote-item-name">
+                  {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" />}
+                  <span>
+                    {item.name}
+                    {item.discount > 0 && <small>Desconto de {money(item.discount)}</small>}
+                  </span>
+                </div>
               </td>
               <td>{item.quantity}</td>
               <td>{money(item.unitPrice)}</td>

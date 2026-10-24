@@ -2,11 +2,15 @@ import { getCurrentUser } from "@/app/auth";
 import { emptyState, hydrateState, type AppState } from "@/lib/summon";
 import { newIntegrityIssues } from "@/lib/integrity";
 import { loadOperationalState, saveOperationalState } from "@/db/state-repository";
+import { getDatabaseProvider } from "@/db/provider";
+import { storeImage } from "@/db/image-repository";
+import { extractInlineImages, isInlineImage } from "@/lib/images";
 
 export const dynamic = "force-dynamic";
 
 const NO_STORE = { "Cache-Control": "no-store, max-age=0" };
-const MAX_BODY_BYTES = 8_000_000;
+// A Vercel recusa corpos acima de 4,5 MB antes de chegar aqui; o limite fica um pouco abaixo para a mensagem ser nossa.
+const MAX_BODY_BYTES = 4_400_000;
 const CONFLICT_MESSAGE = "Os dados foram atualizados em outra sessão. A versão mais recente foi carregada.";
 
 class HttpError extends Error {
@@ -71,6 +75,13 @@ function assertState(value: any, previous: AppState | undefined, action?: string
   if (issues.length) throw new Error(`Gravação recusada: ${issues[0].message}`);
 }
 
+/** Fotos embutidas nos produtos vão para a tabela de fotos; o produto passa a guardar só o endereço. */
+async function moveInlineImages(state: AppState, userId: string) {
+  const db = getDatabaseProvider();
+  if (!db || !state.products.some((p) => isInlineImage(p.imageUrl))) return { state, moved: 0, dropped: 0 };
+  return extractInlineImages(state, (image) => storeImage(db, userId, image));
+}
+
 function errorResponse(error: unknown) {
   const status = error instanceof HttpError ? error.status : 400;
   return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status, headers: NO_STORE });
@@ -81,6 +92,13 @@ export async function GET() {
     const user = await requireApiUser();
     const result = await loadOperationalState(user.userId);
     if (!result) return Response.json({ state: emptyState, version: 0, local: true, storage: "browser" }, { headers: NO_STORE });
+    // Dados antigos com fotos embutidas: separa as fotos uma vez, na primeira abertura depois da atualização.
+    const moved = await moveInlineImages(result.state, user.userId).catch(() => undefined);
+    if (moved && (moved.moved || moved.dropped)) {
+      const saved = await saveOperationalState(user.userId, moved.state, result.version, "fotos-separadas", "product", "images");
+      if (!saved.conflict && "updatedAt" in saved)
+        return Response.json({ ...result, state: moved.state, version: saved.version }, { headers: NO_STORE });
+    }
     return Response.json(result, { headers: NO_STORE });
   } catch (error) {
     return error instanceof HttpError
@@ -93,7 +111,10 @@ export async function PUT(request: Request) {
   try {
     const user = await requireApiUser();
     if (Number(request.headers.get("content-length") || 0) > MAX_BODY_BYTES)
-      throw new HttpError("Os dados passam do limite de 8 MB por gravação. Remova fotos muito grandes dos produtos.", 413);
+      throw new HttpError(
+        "Os dados passam do limite de 4,4 MB por gravação. Tente de novo; se continuar, exporte um backup e me avise.",
+        413,
+      );
     const body = (await request.json()) as {
       state: unknown;
       version: number;
@@ -111,8 +132,11 @@ export async function PUT(request: Request) {
         { error: CONFLICT_MESSAGE, conflict: true, state: existing.state, version: existing.version },
         { status: 409, headers: NO_STORE },
       );
-    const nextState = hydrateState(body.state);
+    let nextState = hydrateState(body.state);
     assertState(nextState, existing.state, body.action);
+    // Uma foto que chegou embutida (aba antiga aberta, backup pequeno) também é separada antes de gravar.
+    const moved = await moveInlineImages(nextState, user.userId);
+    nextState = moved.state;
     const result = await saveOperationalState(
       user.userId,
       nextState,
@@ -126,7 +150,10 @@ export async function PUT(request: Request) {
         { error: CONFLICT_MESSAGE, conflict: true, state: result.state, version: result.version },
         { status: 409, headers: NO_STORE },
       );
-    return Response.json({ version: result.version, updatedAt: result.updatedAt }, { headers: NO_STORE });
+    return Response.json(
+      { version: result.version, updatedAt: result.updatedAt, ...(moved.moved || moved.dropped ? { state: nextState } : {}) },
+      { headers: NO_STORE },
+    );
   } catch (error) {
     return errorResponse(error);
   }

@@ -10,7 +10,7 @@ export type Quote = {
   issuedAt: string;
   validUntil: string;
   leadDays: number;
-  items: { name: string; quantity: number; unitPrice: number; discount: number; total: number }[];
+  items: { name: string; quantity: number; unitPrice: number; discount: number; total: number; imageUrl?: string }[];
   subtotal: number;
   discount: number;
   shipping: number;
@@ -28,6 +28,7 @@ export function buildQuote(state: AppState, order: Order): Quote {
     unitPrice: i.unitPrice,
     discount: i.discount,
     total: cents(i.unitPrice * i.quantity - i.discount),
+    imageUrl: state.products.find((p) => p.id === i.productId)?.imageUrl,
   }));
   const leadDays = Math.max(0, ...order.items.map((i) => state.products.find((p) => p.id === i.productId)?.leadDays || 0));
   return {

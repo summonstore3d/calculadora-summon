@@ -1,0 +1,57 @@
+# Cópia semanal de todos os dados (com as fotos) guardada no próprio GitHub por 90 dias.
+# Precisa de dois segredos em Settings → Secrets and variables → Actions:
+#   APP_URL        endereço de produção do sistema, ex.: https://gestao3d.vercel.app
+#   BACKUP_SECRET  o mesmo valor cadastrado na Vercel (mínimo de 24 caracteres)
+# Para rodar na hora: aba Actions → Backup semanal → Run workflow.
+name: Backup semanal
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # segunda-feira, 6h em Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Conferir que o repositório é privado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" != "true" ]; then
+            echo "::error::Repositório público: qualquer pessoa conseguiria baixar o backup. Torne o repositório privado para usar a cópia automática."
+            exit 1
+          fi
+      - name: Baixar backup
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          BACKUP_SECRET: ${{ secrets.BACKUP_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$BACKUP_SECRET" ]; then
+            echo "::error::Cadastre APP_URL e BACKUP_SECRET em Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          day=$(TZ=America/Sao_Paulo date +%F)
+          file="backup-gestao-3d-$day.json"
+          curl -fsS --retry 3 --retry-all-errors --max-time 120 \
+            -H "Authorization: Bearer $BACKUP_SECRET" -D headers.txt -o "$file" "${APP_URL%/}/api/backup"
+          node -e '
+            const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            if (!Array.isArray(s.products) || !Array.isArray(s.orders)) throw new Error("O arquivo não parece um backup do sistema.");
+            console.log(`Produtos: ${s.products.length} · Pedidos: ${s.orders.length} · Despesas: ${s.expenses.length}`);
+          ' "$file"
+          grep -i "^x-backup" headers.txt || true
+          if grep -qi "^x-backup-missing-images: [1-9]" headers.txt; then
+            echo "::warning::Algumas fotos não foram encontradas e ficaram fora do backup."
+          fi
+          echo "DAY=$day" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ env.DAY }}
+          path: backup-gestao-3d-*.json
+          retention-days: 90
+          if-no-files-found: error

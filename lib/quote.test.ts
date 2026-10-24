@@ -32,3 +32,12 @@ test("link público pode ser criado e desativado", () => {
   assert.equal(setQuoteLink(on, order.id, true).orders[0].quoteToken, token, "reabrir mantém o mesmo link");
   assert.equal(setQuoteLink(on, order.id, false).orders[0].quoteToken, undefined);
 });
+
+test("orçamento mostra a foto do produto quando houver", () => {
+  const withPhoto = base();
+  withPhoto.products[0] = { ...withPhoto.products[0], imageUrl: "/api/imagens/" + "a".repeat(32) };
+  const { state, order } = createOrder(withPhoto, { channel: "direct", items: [{ productId: "p1", quantity: 1 }] });
+  assert.equal(buildQuote(state, order).items[0].imageUrl, "/api/imagens/" + "a".repeat(32));
+  const plain = createOrder(base(), { channel: "direct", items: [{ productId: "p1", quantity: 1 }] });
+  assert.equal(buildQuote(plain.state, plain.order).items[0].imageUrl, undefined);
+});

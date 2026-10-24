@@ -57,6 +57,7 @@ import {
   DataTable,
   Empty,
   Field,
+  ProductThumb,
   PageHead,
   SaveButton,
   SelectField,
@@ -1068,6 +1069,10 @@ export function OrderDetailDialog({
         <div className="order-detail-items">
           {order.items.map((item: any) => (
             <div key={item.id}>
+              <ProductThumb
+                product={state.products.find((p) => p.id === item.productId) || { id: item.productId, name: item.productName }}
+                size={40}
+              />
               <span>
                 <b>
                   {item.quantity}× {item.productName}

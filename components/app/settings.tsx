@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AppState, defaults, hydrateState, migrateLegacy, today, uid, type Settings } from "@/lib/summon";
-import { DataTable, Field, PageHead, SaveButton, Section, n, s } from "@/components/app/shared";
+import { DataTable, Field, PageHead, SaveButton, Section, n, s, uploadInlineImages } from "@/components/app/shared";
 
 export function SettingsPage({ state, save, saving }: { state: AppState; save: any; saving: boolean }) {
   const [pendingImport, setPendingImport] = useState<{ fileName: string; next: AppState } | null>(null);
@@ -33,13 +33,32 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
       ["Despesas", value.expenses.length],
       ["Pagamentos", value.payments.length],
     ] as const;
-  const exportBackup = () => {
+  const download = (blob: Blob) => {
     const a = document.createElement("a"),
-      u = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+      u = URL.createObjectURL(blob);
     a.href = u;
     a.download = `backup-gestao-3d-${today()}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
+  };
+  // Com banco, o servidor monta o arquivo com as fotos dentro. Sem banco, os dados (e as fotos) já estão aqui.
+  const exportBackup = async () => {
+    try {
+      const response = await fetch("/api/backup", { cache: "no-store" });
+      if (response.ok) {
+        download(await response.blob());
+        const missing = Number(response.headers.get("x-backup-missing-images") || 0);
+        if (missing) toast.warning(`${missing} foto(s) não foram encontradas e ficaram fora do backup.`);
+        return;
+      }
+      if (response.status !== 501 && response.status !== 404) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Não foi possível gerar o backup no servidor.");
+      }
+    } catch (error: any) {
+      if (error?.message && !/fetch|network/i.test(error.message)) return toast.error(error.message);
+    }
+    download(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
   };
   const labels: Partial<Record<keyof Settings, string>> = {
     energyRate: "Tarifa de energia (R$/kWh)",
@@ -256,7 +275,19 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
               onClick={async () => {
                 const next = pendingImport?.next;
                 setPendingImport(null);
-                if (next && (await save(next, "backup-import"))) toast.success("Backup importado");
+                if (!next) return;
+                let ready: AppState;
+                try {
+                  const id = toast.loading("Enviando as fotos do backup…");
+                  ready = await uploadInlineImages(next, (done, total) =>
+                    toast.loading(`Enviando as fotos do backup… ${done} de ${total}`, { id }),
+                  );
+                  toast.dismiss(id);
+                } catch (error: any) {
+                  toast.dismiss();
+                  return toast.error(`Importação interrompida, nada foi alterado. ${error?.message || ""}`);
+                }
+                if (await save(ready, "backup-import")) toast.success("Backup importado");
               }}
             >
               Substituir dados

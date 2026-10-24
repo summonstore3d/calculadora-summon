@@ -66,7 +66,8 @@ import {
   PageHead,
   SaveButton,
   SelectField,
-  compressImage,
+  productImage,
+  ProductThumb,
   dateLabel,
   n,
   s,
@@ -615,7 +616,7 @@ export function ProductSave({
           let imageUrl;
           if (file?.size) {
             try {
-              imageUrl = await compressImage(file);
+              imageUrl = await productImage(file);
             } catch (error: any) {
               return toast.error(error.message);
             }
@@ -772,10 +773,10 @@ export function CatalogPage({
     if (!editProduct) return;
     const f = new FormData(e.currentTarget),
       file = f.get("image") as File;
-    let imageUrl = editProduct.imageUrl;
+    let imageUrl = f.get("removeImage") ? undefined : editProduct.imageUrl;
     if (file?.size) {
       try {
-        imageUrl = await compressImage(file);
+        imageUrl = await productImage(file);
       } catch (error: any) {
         return toast.error(error.message);
       }
@@ -979,10 +980,18 @@ export function CatalogPage({
                   <option value="archived">Arquivado</option>
                 </SelectField>
                 <Field label="Descrição" name="description" value={editProduct.description} className="span-2" />
-                <label className="field span-2">
-                  <span>Substituir foto</span>
-                  <Input name="image" type="file" accept="image/jpeg,image/png,image/webp" />
-                </label>
+                <div className="field span-2 photo-field">
+                  <span>{editProduct.imageUrl ? "Foto" : "Adicionar foto"}</span>
+                  <div className="photo-field-row">
+                    <ProductThumb product={editProduct} size={48} />
+                    <Input name="image" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Escolher foto" />
+                  </div>
+                  {editProduct.imageUrl && (
+                    <label className="photo-remove">
+                      <input type="checkbox" name="removeImage" /> Remover a foto atual
+                    </label>
+                  )}
+                </div>
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditId(null)}>
@@ -1877,29 +1886,5 @@ export function SlicerImport({ state, onApply }: { state: AppState; onApply: (in
         </div>
       )}
     </div>
-  );
-}
-
-const THUMB_COLORS = ["#dbeafe", "#dcfce7", "#fef3c7", "#fce7f3", "#ede9fe", "#ccfbf1", "#ffedd5"];
-
-/** Miniatura do produto para reconhecer na lista. Sem foto, mostra as iniciais sobre uma cor fixa por produto. */
-export function ProductThumb({ product, size = 56 }: { product: Pick<Product, "name" | "imageUrl" | "id">; size?: number }) {
-  const initials =
-    product.name
-      .split(/\s+/)
-      .filter((word) => word.length > 2 || /^[A-Z0-9]/.test(word))
-      .slice(0, 2)
-      .map((word) => word[0])
-      .join("")
-      .toUpperCase() || product.name.slice(0, 1).toUpperCase();
-  const color = THUMB_COLORS[[...product.id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % THUMB_COLORS.length];
-  return (
-    <span
-      className="product-thumb"
-      style={{ width: size, height: size, background: product.imageUrl ? undefined : color }}
-      aria-hidden="true"
-    >
-      {product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : initials}
-    </span>
   );
 }

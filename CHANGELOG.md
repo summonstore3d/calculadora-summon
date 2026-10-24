@@ -1,5 +1,27 @@
 # Mudanças
 
+## Fase 6 · Proteger o que já existe (24/10/2026)
+
+**Fotos fora dos dados principais**
+- As fotos dos produtos passam a ficar numa tabela própria no Turso (`images`); o produto guarda só o endereço `/api/imagens/...`. Antes, cada foto (50 a 150 KB) ia junto em toda gravação, e a Vercel recusa envios acima de 4,5 MB.
+- Fotos já cadastradas são separadas sozinhas na primeira abertura depois da atualização.
+- O servidor confere pelos bytes que o arquivo é mesmo JPG, PNG ou WebP (até 2 MB depois de reduzido).
+- No modo "Somente neste navegador", nada muda: a foto continua embutida.
+- Editar produto agora mostra a foto atual e permite removê-la.
+
+**Fotos no orçamento e no pedido**
+- O orçamento (texto impresso, PDF e link público) mostra a foto de cada item ao lado do nome.
+- O detalhe do pedido mostra a miniatura de cada produto.
+- No catálogo, a foto virou uma miniatura ao lado do nome, com as iniciais do produto quando não há foto.
+
+**Backup**
+- "Exportar backup" agora leva as fotos dentro do arquivo. "Importar backup" envia as fotos uma a uma antes de gravar os dados, para não passar do limite.
+- Cópia automática toda segunda às 6h pelo GitHub (`.github/workflows/backup.yml`), guardada por 90 dias. Precisa de `BACKUP_SECRET` na Vercel e no GitHub; só roda em repositório privado. Também apaga fotos sem uso há mais de 30 dias.
+
+**Verificação automática**
+- `.github/workflows/verificacao.yml` roda `pnpm typecheck` e `pnpm test` a cada envio ao GitHub.
+- O limite de gravação do servidor passou de 8 MB para 4,4 MB, abaixo do limite da Vercel, para a mensagem de erro ser clara.
+
 ## Fase 5 · Operação do dia a dia (24/10/2026)
 
 **Outros insumos** (Insumos → Outros insumos)

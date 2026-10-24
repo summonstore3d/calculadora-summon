@@ -23,6 +23,9 @@ export const portableSchema = [
   "CREATE TABLE IF NOT EXISTS goals (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, month TEXT NOT NULL, snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, amount_cents INTEGER NOT NULL, due_date TEXT NOT NULL, paid_at TEXT, status TEXT NOT NULL, recurring INTEGER NOT NULL DEFAULT 0, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS calculations (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)",
+  // Fotos de produto em base64; o produto guarda só /api/imagens/<id>.
+  "CREATE TABLE IF NOT EXISTS images (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, content_type TEXT NOT NULL, bytes INTEGER NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS idx_images_user_created ON images (user_id, created_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_products_user_sku ON products (user_id, sku)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_recipe_product_version ON recipe_versions (product_id, version)",
   "CREATE INDEX IF NOT EXISTS idx_orders_user_status_created ON orders (user_id, status, created_at)",

@@ -165,7 +165,7 @@ export function updateProduct(state:AppState,productId:string,input:Pick<Product
   const product=state.products.find(p=>p.id===productId);if(!product)throw new Error("Produto não encontrado");
   if(!input.name.trim()||!input.sku.trim()||!input.category.trim())throw new Error("Preencha nome, SKU e categoria");
   if(state.products.some(p=>p.id!==productId&&normalize(p.sku)===normalize(input.sku)))throw new Error("Já existe um produto com este SKU");
-  return{...state,products:state.products.map(p=>p.id===productId?{...p,...input,imageUrl:input.imageUrl||p.imageUrl,leadDays:Math.max(0,input.leadDays),minimumStock:Math.max(0,input.minimumStock)}:p)};
+  return{...state,products:state.products.map(p=>p.id===productId?{...p,...input,imageUrl:"imageUrl" in input?input.imageUrl:p.imageUrl,leadDays:Math.max(0,input.leadDays),minimumStock:Math.max(0,input.minimumStock)}:p)};
 }
 
 export function removeProduct(state:AppState,productId:string){
