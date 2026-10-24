@@ -23,6 +23,7 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
   const backupCounts = (value: AppState) =>
     [
       ["Materiais", value.materials.length],
+      ["Outros insumos", (value.supplies || []).length],
       ["Compras", value.purchases.length],
       ["Produtos", value.products.length],
       ["Pedidos", value.orders.length],
@@ -40,7 +41,7 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
     a.click();
     setTimeout(() => URL.revokeObjectURL(u), 1000);
   };
-  const labels: Record<keyof Settings, string> = {
+  const labels: Partial<Record<keyof Settings, string>> = {
     energyRate: "Tarifa de energia (R$/kWh)",
     power: "Potência padrão (kW)",
     manualHourRate: "Valor da hora manual",
@@ -59,7 +60,11 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
     shopeeReleaseDays: "Repasse Shopee (dias após a venda)",
     mlReleaseDays: "Repasse Mercado Livre (dias após a venda)",
     openingCash: "Saldo inicial do caixa (R$)",
+    restockCoverDays: "Reabastecimento: cobrir quantos dias",
+    quoteValidityDays: "Validade do orçamento (dias)",
   };
+  // Só os parâmetros numéricos vão neste formulário; os textos (dados da empresa) têm o seu.
+  const numericKeys = (Object.keys(defaults) as (keyof Settings)[]).filter((k) => typeof defaults[k] === "number");
   return (
     <>
       <PageHead title="Parâmetros" description="Valores usados apenas em novos cálculos e fichas técnicas." />
@@ -69,14 +74,46 @@ export function SettingsPage({ state, save, saving }: { state: AppState; save: a
           onSubmit={async (e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget),
-              settings = Object.fromEntries(Object.keys(defaults).map((k) => [k, n(f, k)])) as any;
+              settings = { ...state.settings, ...Object.fromEntries(numericKeys.map((k) => [k, n(f, k)])) };
             if (await save({ ...state, settings }, "settings-update")) toast.success("Parâmetros atualizados");
           }}
         >
-          {(Object.keys(defaults) as (keyof Settings)[]).map((k) => (
-            <Field key={k} label={labels[k]} name={k} type="number" step=".01" value={state.settings[k]} />
+          {numericKeys.map((k) => (
+            <Field key={k} label={labels[k] || k} name={k} type="number" step=".01" value={state.settings[k] as number} />
           ))}
           <SaveButton saving={saving}>Salvar parâmetros</SaveButton>
+        </form>
+      </Section>
+      <Section title="Dados para o orçamento" description="Aparecem no orçamento enviado ao cliente.">
+        <form
+          className="form-grid cols-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget),
+              settings = {
+                ...state.settings,
+                businessName: s(f, "businessName"),
+                businessContact: s(f, "businessContact"),
+                quoteNotes: s(f, "quoteNotes"),
+              };
+            if (await save({ ...state, settings }, "settings-business")) toast.success("Dados do orçamento atualizados");
+          }}
+        >
+          <Field label="Nome da empresa" name="businessName" value={state.settings.businessName} placeholder="Ex.: Oficina 3D" />
+          <Field
+            label="Contato"
+            name="businessContact"
+            value={state.settings.businessContact}
+            placeholder="WhatsApp, e-mail ou Instagram"
+          />
+          <Field
+            label="Condições padrão"
+            name="quoteNotes"
+            value={state.settings.quoteNotes}
+            placeholder="Ex.: 50% na aprovação, restante na entrega"
+            className="span-2"
+          />
+          <SaveButton saving={saving}>Salvar dados</SaveButton>
         </form>
       </Section>
       <Section title="Fornecedores">

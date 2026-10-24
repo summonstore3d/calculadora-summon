@@ -29,6 +29,9 @@ export function integrityIssues(state: AppState): Issue[] {
         key: `estoque-material:${material.id}`,
         message: `O estoque de ${material.type} ${material.color} ficou negativo.`,
       });
+  for (const supply of state.supplies || [])
+    if (supply.stock < 0)
+      issues.push({ key: `estoque-insumo:${supply.id}`, message: `O estoque de ${supply.name} ficou negativo.` });
   for (const payment of state.payments) {
     if (
       payment.receipts?.length &&

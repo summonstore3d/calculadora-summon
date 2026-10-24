@@ -1,8 +1,9 @@
-// Operações que antes eram montadas dentro das telas: criar pedido e registrar compra de filamento.
+// Operações de estoque e venda que antes eram montadas dentro das telas: pedido, compra de filamento e outros insumos.
 import {
   cents,
   channelPrice,
   nextSequence,
+  normalize,
   today,
   uid,
   type AppState,
@@ -10,8 +11,15 @@ import {
   type Movement,
   type Order,
   type Purchase,
+  type Supply,
 } from "./summon.ts";
-import { expectedReceivable, purchaseExpenses, type PurchasePaymentPlan } from "./finance.ts";
+import {
+  SUPPLY_PURCHASE_CATEGORY,
+  expectedReceivable,
+  inventoryExpenses,
+  purchaseExpenses,
+  type PurchasePaymentPlan,
+} from "./finance.ts";
 
 export type OrderInput = {
   customerId?: string;
@@ -182,6 +190,177 @@ export function registerPurchase(state: AppState, materialId: string, input: Pur
       expenses: [...state.expenses, ...payables],
     },
     purchase,
+    payables,
+  };
+}
+
+// ---------------------------------------------------------------- outros insumos
+
+export type SupplyInput = { name: string; unit: string; minimum: number; supplierId?: string; location?: string };
+
+function validateSupply(state: AppState, input: SupplyInput, id?: string) {
+  if (!input.name.trim()) throw new Error("Informe o nome do insumo");
+  if (state.supplies.some((x) => x.id !== id && x.status === "active" && normalize(x.name) === normalize(input.name)))
+    throw new Error("Já existe um insumo com este nome");
+  if (input.minimum < 0) throw new Error("O estoque mínimo não pode ser negativo");
+}
+
+export function createSupply(
+  state: AppState,
+  input: SupplyInput & { stock?: number; averageCost?: number },
+  now = new Date().toISOString(),
+) {
+  validateSupply(state, input);
+  const stock = cents(Math.max(0, input.stock || 0));
+  const supply: Supply = {
+    id: uid(),
+    name: input.name.trim(),
+    unit: input.unit.trim() || "un",
+    stock,
+    averageCost: Math.max(0, input.averageCost || 0),
+    minimum: cents(input.minimum),
+    supplierId: input.supplierId || undefined,
+    location: input.location?.trim() || "",
+    status: "active",
+    createdAt: now,
+  };
+  const movements: Movement[] = stock
+    ? [
+        {
+          id: uid(),
+          entity: "supply",
+          entityId: supply.id,
+          kind: "initial",
+          quantity: stock,
+          balanceAfter: stock,
+          unitCost: supply.averageCost,
+          note: "Saldo inicial",
+          createdAt: now,
+        },
+      ]
+    : [];
+  return { state: { ...state, supplies: [...state.supplies, supply], movements: [...state.movements, ...movements] }, supply };
+}
+
+export function updateSupply(state: AppState, supplyId: string, input: SupplyInput & { status?: Supply["status"] }) {
+  if (!state.supplies.some((x) => x.id === supplyId)) throw new Error("Insumo não encontrado");
+  validateSupply(state, input, supplyId);
+  return {
+    ...state,
+    supplies: state.supplies.map((x) =>
+      x.id === supplyId
+        ? {
+            ...x,
+            name: input.name.trim(),
+            unit: input.unit.trim() || "un",
+            minimum: cents(input.minimum),
+            supplierId: input.supplierId || undefined,
+            location: input.location?.trim() || "",
+            status: input.status || x.status,
+          }
+        : x,
+    ),
+  };
+}
+
+/** Contagem física: define, soma ou retira do saldo, sempre com motivo. */
+export function adjustSupplyStock(
+  state: AppState,
+  supplyId: string,
+  input: { operation: "set" | "add" | "remove"; quantity: number; reason: string },
+  now = new Date().toISOString(),
+) {
+  const supply = state.supplies.find((x) => x.id === supplyId);
+  if (!supply) throw new Error("Insumo não encontrado");
+  if (!input.reason.trim()) throw new Error("Informe o motivo do ajuste");
+  const quantity = cents(Math.max(0, input.quantity)),
+    next =
+      input.operation === "set"
+        ? quantity
+        : input.operation === "add"
+          ? cents(supply.stock + quantity)
+          : cents(supply.stock - quantity);
+  if (next < 0) throw new Error("O ajuste deixaria o estoque negativo");
+  const movement: Movement = {
+    id: uid(),
+    entity: "supply",
+    entityId: supplyId,
+    kind: "inventory-adjustment",
+    quantity: cents(next - supply.stock),
+    balanceAfter: next,
+    unitCost: supply.averageCost,
+    note: input.reason.trim(),
+    createdAt: now,
+  };
+  return {
+    ...state,
+    supplies: state.supplies.map((x) => (x.id === supplyId ? { ...x, stock: next } : x)),
+    movements: [...state.movements, movement],
+  };
+}
+
+export type SupplyPurchaseInput = {
+  quantity: number;
+  subtotal: number;
+  freight?: number;
+  date?: string;
+  supplierId?: string;
+  note?: string;
+  payment: PurchasePaymentPlan;
+};
+
+/** Entrada de outro insumo: soma ao estoque, recalcula o custo médio e cria a saída no caixa ou as contas a pagar. */
+export function registerSupplyPurchase(
+  state: AppState,
+  supplyId: string,
+  input: SupplyPurchaseInput,
+  now = new Date().toISOString(),
+) {
+  const supply = state.supplies.find((x) => x.id === supplyId);
+  if (!supply) throw new Error("Insumo não encontrado");
+  const quantity = cents(Number(input.quantity) || 0),
+    subtotal = cents(Number(input.subtotal) || 0),
+    freight = cents(Math.max(0, Number(input.freight) || 0)),
+    total = cents(subtotal + freight);
+  if (quantity <= 0 || subtotal < 0) throw new Error("Informe uma quantidade e um valor válidos");
+  if (input.payment.mode !== "paid" && !input.payment.dueDate) throw new Error("Informe o primeiro vencimento");
+  // Custo médio com 4 casas: insumos baratos (R$ 0,15 o ímã) perderiam precisão em centavos.
+  const next = cents(supply.stock + quantity),
+    averageCost = next ? Math.round(((supply.stock * supply.averageCost + total) / next) * 10000) / 10000 : 0;
+  const date = input.date || today(),
+    note = input.note?.trim() || "",
+    id = uid();
+  const movement: Movement = {
+    id,
+    entity: "supply",
+    entityId: supplyId,
+    kind: "purchase",
+    quantity,
+    balanceAfter: next,
+    referenceId: id,
+    unitCost: total / quantity,
+    note,
+    createdAt: now,
+  };
+  const payables =
+    total > 0
+      ? inventoryExpenses(
+          { id, total, date, note },
+          `Compra ${supply.name} (${String(quantity).replace(".", ",")} ${supply.unit})`,
+          SUPPLY_PURCHASE_CATEGORY,
+          "supply-purchase",
+          input.payment,
+        )
+      : [];
+  return {
+    state: {
+      ...state,
+      supplies: state.supplies.map((x) =>
+        x.id === supplyId ? { ...x, stock: next, averageCost, supplierId: input.supplierId || x.supplierId } : x,
+      ),
+      movements: [...state.movements, movement],
+      expenses: [...state.expenses, ...payables],
+    },
     payables,
   };
 }

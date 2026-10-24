@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Plus, Search } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +17,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AppState, money, normalize, reversePurchase, today, uid, updatePurchase } from "@/lib/summon";
-import { registerPurchase } from "@/lib/operations";
+import { AppState, cents, money, normalize, reversePurchase, today, uid, updatePurchase, type Supply } from "@/lib/summon";
+import { adjustSupplyStock, createSupply, registerPurchase, registerSupplyPurchase, updateSupply } from "@/lib/operations";
+import { restockMessage, restockPlan, type RestockItem } from "@/lib/restock";
 import { type PurchasePaymentPlan, addDays } from "@/lib/finance";
 import { DataTable, Empty, Field, PageHead, SaveButton, SelectField, Stat, dateLabel, n, s } from "@/components/app/shared";
 
@@ -270,7 +271,7 @@ export function MaterialActionDialog({
   saving,
   onClose,
 }: {
-  action: { materialId: string; mode: "purchase" | "adjust" | "edit" } | null;
+  action: { materialId: string; mode: "purchase" | "adjust" | "edit"; suggestedKg?: number; suggestedPrice?: number } | null;
   state: AppState;
   save: any;
   saving: boolean;
@@ -394,8 +395,19 @@ export function MaterialActionDialog({
                   <small>{money(material.averageCost)}/kg de custo médio</small>
                 </div>
                 <div className="form-grid cols-2">
-                  <Field label="Peso comprado (kg)" name="kg" type="number" step=".001" required />
-                  <Field label="Valor dos materiais" name="subtotal" type="number" step=".01" required />
+                  <Field label="Peso comprado (kg)" name="kg" type="number" step=".001" value={action?.suggestedKg} required />
+                  <Field
+                    label="Valor dos materiais"
+                    name="subtotal"
+                    type="number"
+                    step=".01"
+                    value={
+                      action?.suggestedKg && action.suggestedPrice
+                        ? Math.round(action.suggestedKg * action.suggestedPrice * 100) / 100
+                        : undefined
+                    }
+                    required
+                  />
                   <Field label="Frete" name="freight" type="number" step=".01" value="0" />
                   <Field label="Data da compra" name="date" type="date" value={today()} />
                   <SelectField label="Fornecedor" name="supplierId" value={material.supplierId || ""}>
@@ -623,6 +635,539 @@ export function PurchasesPage({ state, save, saving }: { state: AppState; save: 
           )}
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- outros insumos
+
+const SUPPLY_UNITS = ["un", "g", "ml", "m", "par", "pacote"];
+const qty = (value: number, unit: string) => `${String(Math.round(value * 100) / 100).replace(".", ",")} ${unit}`;
+
+export function SuppliesPage({
+  state,
+  save,
+  saving,
+  initialSupplyRef,
+}: {
+  state: AppState;
+  save: any;
+  saving: boolean;
+  initialSupplyRef?: string;
+}) {
+  const [q, setQ] = useState(""),
+    [status, setStatus] = useState("active"),
+    [editing, setEditing] = useState<{ id?: string } | null>(null),
+    [action, setAction] = useState<{ supplyId: string; mode: "purchase" | "adjust"; suggested?: number; price?: number } | null>(
+      null,
+    ),
+    supplies = state.supplies || [],
+    rows = supplies.filter(
+      (x) =>
+        normalize(x.name).includes(normalize(q)) &&
+        (status === "all" || (status === "low" ? x.status === "active" && x.stock <= x.minimum : x.status === status)),
+    ),
+    stockValue = cents(supplies.filter((x) => x.status === "active").reduce((sum, x) => sum + x.stock * x.averageCost, 0)),
+    low = supplies.filter((x) => x.status === "active" && x.stock <= x.minimum).length,
+    usedIn = (id: string) =>
+      state.products.filter((p) =>
+        state.recipes.find((r) => r.id === p.activeRecipeId)?.components?.some((c) => c.supplyId === id),
+      );
+  useEffect(() => {
+    if (!initialSupplyRef?.startsWith("entrada:")) return;
+    const supply = supplies.find((x) => x.id === initialSupplyRef.slice(8));
+    if (supply) setAction({ supplyId: supply.id, mode: "purchase" });
+  }, [initialSupplyRef]);
+  return (
+    <>
+      <PageHead
+        title="Outros insumos"
+        description="Ímãs, parafusos, caixas, etiquetas e tudo o que entra na peça além do filamento."
+        action={
+          <Button onClick={() => setEditing({})}>
+            <Plus />
+            Novo insumo
+          </Button>
+        }
+      />
+      <div className="stats-grid">
+        <Stat label="Insumos ativos" value={String(supplies.filter((x) => x.status === "active").length)} />
+        <Stat label="Abaixo do mínimo" value={String(low)} tone={low ? "red" : "green"} />
+        <Stat label="Valor em estoque" value={money(stockValue)} detail="Pelo custo médio" />
+      </div>
+      <div className="toolbar">
+        <div className="search">
+          <Search />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar insumo" />
+        </div>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Situação">
+          <option value="active">Ativos</option>
+          <option value="low">Abaixo do mínimo</option>
+          <option value="archived">Arquivados</option>
+          <option value="all">Todos</option>
+        </select>
+      </div>
+      {rows.length ? (
+        <DataTable headers={["Insumo", "Estoque", "Mínimo", "Custo médio", "Usado em", "Ações"]}>
+          {rows.map((x) => {
+            const products = usedIn(x.id),
+              isLow = x.status === "active" && x.stock <= x.minimum;
+            return (
+              <tr key={x.id} id={`supply-${x.id}`}>
+                <td data-label="Insumo">
+                  <b>{x.name}</b>
+                  <small>
+                    {[state.suppliers.find((f) => f.id === x.supplierId)?.name, x.location].filter(Boolean).join(" · ") ||
+                      "Sem fornecedor"}
+                  </small>
+                </td>
+                <td data-label="Estoque">
+                  <b className={isLow ? "tone-overdue" : ""}>{qty(x.stock, x.unit)}</b>
+                  {isLow && <small className="tone-overdue">Abaixo do mínimo</small>}
+                </td>
+                <td data-label="Mínimo">{qty(x.minimum, x.unit)}</td>
+                <td data-label="Custo médio">
+                  {money(x.averageCost)}/{x.unit}
+                </td>
+                <td data-label="Usado em">
+                  {products.length ? products.map((p) => p.name).join(", ") : <span className="muted">Nenhuma ficha</span>}
+                </td>
+                <td data-label="Ações">
+                  <div className="row-actions">
+                    {x.status === "active" && (
+                      <Button size="sm" onClick={() => setAction({ supplyId: x.id, mode: "purchase" })}>
+                        Entrada
+                      </Button>
+                    )}
+                    {x.status === "active" && (
+                      <Button size="sm" variant="outline" onClick={() => setAction({ supplyId: x.id, mode: "adjust" })}>
+                        Ajustar
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" aria-label={`Editar ${x.name}`} onClick={() => setEditing({ id: x.id })}>
+                      <Pencil />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </DataTable>
+      ) : (
+        <Empty
+          title={supplies.length ? "Nenhum insumo neste filtro" : "Nenhum insumo cadastrado"}
+          description="Cadastre ímãs, parafusos, caixas ou etiquetas para incluí-los na ficha técnica e baixar o estoque na produção."
+        />
+      )}
+      <SupplyDialog target={editing} state={state} save={save} saving={saving} onClose={() => setEditing(null)} />
+      <SupplyActionDialog action={action} state={state} save={save} saving={saving} onClose={() => setAction(null)} />
+    </>
+  );
+}
+
+function SupplyDialog({
+  target,
+  state,
+  save,
+  saving,
+  onClose,
+}: {
+  target: { id?: string } | null;
+  state: AppState;
+  save: any;
+  saving: boolean;
+  onClose: () => void;
+}) {
+  const supply = target?.id ? state.supplies.find((x) => x.id === target.id) : undefined,
+    creating = Boolean(target && !target.id);
+  async function submit(event: any) {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget),
+      input = {
+        name: s(f, "name"),
+        unit: s(f, "unit"),
+        minimum: n(f, "minimum"),
+        supplierId: s(f, "supplierId"),
+        location: s(f, "location"),
+      };
+    try {
+      if (creating) {
+        if (
+          await save(
+            createSupply(state, { ...input, stock: n(f, "stock"), averageCost: n(f, "averageCost") }).state,
+            "supply-create",
+          )
+        ) {
+          toast.success("Insumo cadastrado");
+          onClose();
+        }
+      } else if (supply) {
+        if (
+          await save(
+            updateSupply(state, supply.id, { ...input, status: (s(f, "status") as Supply["status"]) || supply.status }),
+            "supply-update",
+          )
+        ) {
+          toast.success("Insumo atualizado");
+          onClose();
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  }
+  return (
+    <Dialog
+      open={Boolean(target)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="entity-dialog">
+        <DialogHeader>
+          <DialogTitle>{creating ? "Novo insumo" : `Editar ${supply?.name || "insumo"}`}</DialogTitle>
+          <DialogDescription>
+            {creating
+              ? "O saldo inicial e o custo entram uma vez; depois, use Entrada para compras."
+              : "Para mudar o saldo, use Ajustar ou Entrada."}
+          </DialogDescription>
+        </DialogHeader>
+        {target && (creating || supply) && (
+          <form key={target.id || "novo"} className="form-grid cols-2" onSubmit={submit}>
+            <Field
+              label="Nome"
+              name="name"
+              value={supply?.name}
+              placeholder="Ex.: Ímã de neodímio 10x3 mm"
+              required
+              className="span-2"
+            />
+            <SelectField label="Unidade" name="unit" value={supply?.unit || "un"}>
+              {SUPPLY_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </SelectField>
+            <Field label="Estoque mínimo" name="minimum" type="number" step=".01" value={supply?.minimum ?? 0} />
+            {creating && <Field label="Saldo atual" name="stock" type="number" step=".01" value={0} />}
+            {creating && <Field label="Custo por unidade (R$)" name="averageCost" type="number" step=".0001" value={0} />}
+            <SelectField label="Fornecedor" name="supplierId" value={supply?.supplierId || ""}>
+              <option value="">Não definido</option>
+              {state.suppliers
+                .filter((x) => x.status === "active")
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+            </SelectField>
+            <Field label="Local" name="location" value={supply?.location} placeholder="Ex.: Gaveta 2" />
+            {supply && (
+              <SelectField label="Situação" name="status" value={supply.status}>
+                <option value="active">Ativo</option>
+                <option value="archived">Arquivado</option>
+              </SelectField>
+            )}
+            <DialogFooter className="span-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancelar
+              </Button>
+              <SaveButton saving={saving}>{creating ? "Cadastrar" : "Salvar"}</SaveButton>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SupplyActionDialog({
+  action,
+  state,
+  save,
+  saving,
+  onClose,
+}: {
+  action: { supplyId: string; mode: "purchase" | "adjust"; suggested?: number; price?: number } | null;
+  state: AppState;
+  save: any;
+  saving: boolean;
+  onClose: () => void;
+}) {
+  const supply = action && state.supplies.find((x) => x.id === action.supplyId);
+  async function submit(event: any) {
+    event.preventDefault();
+    if (!supply || !action) return;
+    const f = new FormData(event.currentTarget);
+    try {
+      if (action.mode === "purchase") {
+        const result = registerSupplyPurchase(state, supply.id, {
+          quantity: n(f, "quantity"),
+          subtotal: n(f, "subtotal"),
+          freight: n(f, "freight"),
+          date: s(f, "date"),
+          supplierId: s(f, "supplierId") || undefined,
+          note: s(f, "note"),
+          payment: {
+            mode: (s(f, "payMode") || "paid") as PurchasePaymentPlan["mode"],
+            dueDate: s(f, "payDue"),
+            installments: n(f, "payInstallments"),
+          },
+        });
+        if (await save(result.state, "supply-purchase")) {
+          toast.success(
+            result.payables[0]?.status === "pago"
+              ? "Entrada registrada e saída lançada no caixa"
+              : result.payables.length
+                ? `Entrada registrada e ${result.payables.length === 1 ? "conta a pagar criada" : `${result.payables.length} parcelas criadas`}`
+                : "Entrada registrada",
+          );
+          onClose();
+        }
+      } else if (
+        await save(
+          adjustSupplyStock(state, supply.id, {
+            operation: s(f, "operation") as "set" | "add" | "remove",
+            quantity: n(f, "quantity"),
+            reason: s(f, "reason"),
+          }),
+          "supply-adjust",
+        )
+      ) {
+        toast.success("Estoque ajustado");
+        onClose();
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  }
+  return (
+    <Dialog
+      open={Boolean(supply)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="entity-dialog">
+        <DialogHeader>
+          <DialogTitle>
+            {action?.mode === "purchase" ? "Registrar entrada" : "Ajustar estoque"} · {supply?.name}
+          </DialogTitle>
+          <DialogDescription>
+            Saldo atual: {supply ? qty(supply.stock, supply.unit) : ""} · custo médio {money(supply?.averageCost || 0)}/
+            {supply?.unit}
+          </DialogDescription>
+        </DialogHeader>
+        {supply && action && (
+          <form key={`${supply.id}-${action.mode}`} className="form-grid cols-2" onSubmit={submit}>
+            {action.mode === "purchase" ? (
+              <>
+                <Field
+                  label={`Quantidade (${supply.unit})`}
+                  name="quantity"
+                  type="number"
+                  step=".01"
+                  value={action.suggested}
+                  required
+                />
+                <Field
+                  label="Valor dos itens"
+                  name="subtotal"
+                  type="number"
+                  step=".01"
+                  value={action.suggested && action.price ? cents(action.suggested * action.price) : undefined}
+                  required
+                />
+                <Field label="Frete" name="freight" type="number" step=".01" value="0" />
+                <Field label="Data da compra" name="date" type="date" value={today()} />
+                <SelectField label="Fornecedor" name="supplierId" value={supply.supplierId || ""}>
+                  <option value="">Não definido</option>
+                  {state.suppliers
+                    .filter((x) => x.status === "active")
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                </SelectField>
+                <Field label="Observação" name="note" />
+                <PurchasePaymentFields />
+              </>
+            ) : (
+              <>
+                <SelectField label="Operação" name="operation" value="set">
+                  <option value="set">Definir saldo (contagem)</option>
+                  <option value="add">Somar</option>
+                  <option value="remove">Retirar (perda, uso fora da produção)</option>
+                </SelectField>
+                <Field
+                  label={`Quantidade (${supply.unit})`}
+                  name="quantity"
+                  type="number"
+                  step=".01"
+                  value={supply.stock}
+                  required
+                />
+                <Field label="Motivo" name="reason" required className="span-2" placeholder="Ex.: contagem do mês" />
+              </>
+            )}
+            <DialogFooter className="span-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancelar
+              </Button>
+              <SaveButton saving={saving}>{action.mode === "purchase" ? "Registrar entrada" : "Salvar ajuste"}</SaveButton>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------- reabastecimento
+
+export function RestockPage({ state, save, saving }: { state: AppState; save: any; saving: boolean }) {
+  const [coverDays, setCoverDays] = useState(state.settings.restockCoverDays ?? 15),
+    [quantities, setQuantities] = useState<Record<string, number>>({}),
+    [materialAction, setMaterialAction] = useState<{
+      materialId: string;
+      mode: "purchase";
+      suggestedKg?: number;
+      suggestedPrice?: number;
+    } | null>(null),
+    [supplyAction, setSupplyAction] = useState<{ supplyId: string; mode: "purchase"; suggested?: number; price?: number } | null>(
+      null,
+    ),
+    plan = useMemo(() => restockPlan(state, new Date(), coverDays), [state, coverDays]),
+    amount = (item: RestockItem) => quantities[item.id] ?? item.suggested,
+    total = cents(plan.items.reduce((sum, item) => sum + amount(item) * item.unitPrice, 0));
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Lista copiada. Cole no WhatsApp ou no e-mail do fornecedor.");
+    } catch {
+      toast.error("Não foi possível copiar. Selecione o texto da lista e copie manualmente.");
+    }
+  }
+  function buy(item: RestockItem) {
+    if (item.kind === "material")
+      setMaterialAction({ materialId: item.id, mode: "purchase", suggestedKg: amount(item), suggestedPrice: item.unitPrice });
+    else setSupplyAction({ supplyId: item.id, mode: "purchase", suggested: amount(item), price: item.unitPrice });
+  }
+  return (
+    <>
+      <PageHead
+        title="Reabastecimento"
+        description="O que comprar para cobrir o estoque mínimo, a produção em aberto e o consumo dos próximos dias."
+        action={
+          <label className="finance-month">
+            <span>Cobrir os próximos</span>
+            <select value={coverDays} onChange={(e) => setCoverDays(Number(e.target.value))}>
+              {[7, 15, 30, 45, 60].map((d) => (
+                <option key={d} value={d}>
+                  {d} dias
+                </option>
+              ))}
+            </select>
+          </label>
+        }
+      />
+      <div className="stats-grid">
+        <Stat
+          label="Itens para comprar"
+          value={String(plan.items.length)}
+          detail={`${plan.items.filter((i) => i.urgency === "critical").length} urgentes`}
+          tone={plan.items.some((i) => i.urgency === "critical") ? "red" : "green"}
+        />
+        <Stat label="Custo estimado" value={money(total)} detail="Pelo preço da última compra" />
+        <Stat label="Fornecedores" value={String(plan.groups.length)} />
+      </div>
+      {plan.groups.length ? (
+        plan.groups.map((group) => (
+          <section key={group.supplierId || "sem"} className="restock-group">
+            <div className="restock-group-head">
+              <span>
+                <b>{group.supplierName}</b>
+                <small>
+                  {group.contact ||
+                    (group.supplierId ? "Sem contato cadastrado" : "Defina o fornecedor no cadastro do material ou insumo")}
+                </small>
+              </span>
+              <span className="restock-group-total">
+                {money(cents(group.items.reduce((sum, i) => sum + amount(i) * i.unitPrice, 0)))}
+              </span>
+              <Button size="sm" variant="outline" onClick={() => copy(restockMessage(group, quantities))}>
+                <ClipboardList />
+                Copiar lista
+              </Button>
+            </div>
+            <div className="finance-table">
+              <DataTable headers={["Item", "Estoque", "Produção aberta", "Comprar", "Estimado", ""]}>
+                {group.items.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="Item">
+                      <b>{item.name}</b>
+                      <small className={item.urgency === "critical" ? "tone-overdue" : "tone-week"}>
+                        {item.reason}
+                        {item.detail ? ` · ${item.detail}` : ""}
+                      </small>
+                    </td>
+                    <td data-label="Estoque">
+                      {qty(item.stock, item.unit)}
+                      <small>mínimo {qty(item.minimum, item.unit)}</small>
+                    </td>
+                    <td data-label="Produção aberta">{item.planned ? qty(item.planned, item.unit) : "—"}</td>
+                    <td data-label="Comprar">
+                      <label className="restock-qty">
+                        <Input
+                          type="number"
+                          min="0"
+                          step={item.kind === "material" ? "1" : "1"}
+                          value={amount(item)}
+                          aria-label={`Quantidade de ${item.name}`}
+                          onChange={(e) =>
+                            setQuantities((current) => ({ ...current, [item.id]: Math.max(0, Number(e.target.value) || 0) }))
+                          }
+                        />
+                        <span>{item.unit}</span>
+                      </label>
+                    </td>
+                    <td data-label="Estimado">
+                      {money(cents(amount(item) * item.unitPrice))}
+                      <small>
+                        {money(item.unitPrice)}/{item.unit}
+                      </small>
+                    </td>
+                    <td>
+                      <Button size="sm" disabled={!amount(item)} onClick={() => buy(item)}>
+                        Registrar compra
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </DataTable>
+            </div>
+          </section>
+        ))
+      ) : (
+        <Empty
+          title="Nada para comprar agora"
+          description={`Filamento e insumos cobrem o mínimo, a produção aberta e o consumo dos próximos ${coverDays} dias.`}
+        />
+      )}
+      <p className="finance-note">
+        Sugestão = estoque mínimo + o que as ordens de produção abertas vão usar + o consumo médio dos últimos 30 dias ×{" "}
+        {coverDays} dias − o estoque atual. Filamento é arredondado para kg inteiros.
+      </p>
+      <MaterialActionDialog
+        action={materialAction}
+        state={state}
+        save={save}
+        saving={saving}
+        onClose={() => setMaterialAction(null)}
+      />
+      <SupplyActionDialog action={supplyAction} state={state} save={save} saving={saving} onClose={() => setSupplyAction(null)} />
     </>
   );
 }

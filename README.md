@@ -4,11 +4,11 @@ Sistema para quem vende peças impressas em 3D: calcula custo e preço, controla
 
 ## O que o sistema faz
 
-- **Calculadora:** custo por peça (filamento, energia, desgaste da impressora, mão de obra, manutenção, falhas e embalagem) e preço sugerido para venda direta, Shopee e Mercado Livre, com lucro e margem já descontados imposto e taxas.
+- **Calculadora:** custo por peça (filamento, componentes, energia, desgaste da impressora, mão de obra, manutenção, falhas e embalagem) e preço sugerido para venda direta, Shopee e Mercado Livre, com lucro e margem já descontados imposto e taxas. Peso e tempo podem ser lidos do G-code ou do 3MF fatiado (PrusaSlicer, OrcaSlicer, Bambu Studio, Cura).
 - **Catálogo e ficha técnica:** cada produto guarda materiais, pesos e tempos em versões. Quando o filamento ou os parâmetros mudam, o sistema avisa quais preços ficaram desatualizados.
-- **Insumos:** estoque de filamento em gramas com custo médio. Compras à vista, a prazo ou parceladas.
-- **Produção:** kanban de ordens. Ao concluir, baixa o filamento e cria um lote de peças com o custo real.
-- **Vendas:** pedidos do orçamento à entrega, com separação de estoque por lote (o mais antigo primeiro), devolução e clientes.
+- **Insumos:** estoque de filamento em gramas e de outros insumos (ímãs, parafusos, caixas, etiquetas) com custo médio. Compras à vista, a prazo ou parceladas. Lista de reabastecimento por fornecedor, com texto pronto para pedir cotação.
+- **Produção:** kanban de ordens. Ao concluir, baixa o filamento e os componentes e cria um lote de peças com o custo real.
+- **Vendas:** pedidos do orçamento à entrega, com separação de estoque por lote (o mais antigo primeiro), devolução e clientes. Orçamento para o cliente em texto (WhatsApp), impressão ou link público revogável.
 - **Financeiro:** contas a pagar (com recorrência e parcelas), contas a receber (com recebimento parcial e repasse de marketplace), extrato de caixa e resultado do mês (DRE).
 - **Painel e relatórios:** vendas, lucro, metas do mês, curva ABC, cobertura de estoque e necessidade de compra.
 
@@ -33,7 +33,7 @@ Abra http://localhost:3000 e entre com a senha definida em `APP_PASSWORD`. Sem a
    - `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`: o banco onde os dados ficam guardados.
 3. Faça o deploy. As tabelas e os índices são criados sozinhos no primeiro acesso.
 4. Entre no sistema e confira que o topo mostra **Banco permanente**.
-5. Em **Configurações → Parâmetros**, informe o saldo inicial do caixa e revise taxas, imposto e prazos de repasse.
+5. Em **Configurações → Parâmetros**, informe o saldo inicial do caixa, revise taxas, imposto e prazos de repasse, e preencha os dados da empresa que aparecem no orçamento.
 
 Se você já usava o sistema só no navegador, o primeiro acesso com o banco vazio transfere esses dados para o banco automaticamente.
 
@@ -55,10 +55,14 @@ O build da Vercel não para por erro de tipo (`typescript.ignoreBuildErrors` em 
 | `lib/operations.ts` | Criar pedido e registrar compra de filamento |
 | `lib/integrity.ts` | Conferência que o servidor faz antes de gravar |
 | `lib/dashboard.ts` | Números do painel |
+| `lib/restock.ts` | Lista de reabastecimento |
+| `lib/slicer.ts` | Leitura de G-code e 3MF fatiado |
+| `lib/quote.ts` | Orçamento para o cliente |
 | `components/summon-app.tsx` | Estrutura do app: menu, carregamento e gravação dos dados |
 | `components/app/*.tsx` | Uma pasta por área: `dashboard`, `sales`, `products`, `production`, `supplies`, `finance`, `reports`, `settings` e `shared` (campos, tabelas e cartões comuns) |
 | `app/api/state` | API que lê e grava os dados no Turso |
 | `app/entrar`, `app/api/sessao` | Login por senha |
+| `app/o/[token]` | Página pública do orçamento (sem senha, só com o link; some quando o link é desativado) |
 | `db/` | Acesso ao Turso, tabelas e índices |
 
 Os dados ficam em tabelas por tipo (materiais, pedidos, lotes etc.). Cada gravação usa controle de versão, para que duas pessoas mexendo ao mesmo tempo não sobrescrevam uma à outra, e fica registrada na auditoria.

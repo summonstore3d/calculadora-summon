@@ -1,8 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Printer, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+  Printer,
+  Search,
+  X,
+} from "lucide-react";
+import { QuoteView } from "@/components/quote-view";
+import { buildQuote, quoteText, setQuoteLink } from "@/lib/quote";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -529,12 +544,14 @@ export function OrdersPage({
   saving,
   initialOrderRef,
   onOrderRefChange,
+  linkEnabled = false,
 }: {
   state: AppState;
   save: any;
   saving: boolean;
   initialOrderRef?: string;
   onOrderRefChange: (value?: string) => void;
+  linkEnabled?: boolean;
 }) {
   const [items, setItems] = useState([{ productId: "", quantity: 1, unitPrice: 0, discount: 0 }]),
     [orderChannel, setOrderChannel] = useState<Channel>("direct"),
@@ -956,6 +973,7 @@ export function OrdersPage({
           onFinancial={() => setFinancialOrderId(detailOrder.id)}
           save={save}
           saving={saving}
+          linkEnabled={linkEnabled}
         />
       )}{" "}
       {editOrder && (
@@ -981,6 +999,7 @@ export function OrderDetailDialog({
   onFinancial,
   save,
   saving,
+  linkEnabled = false,
 }: {
   order: any;
   state: AppState;
@@ -990,7 +1009,9 @@ export function OrderDetailDialog({
   onFinancial: () => void;
   save: any;
   saving: boolean;
+  linkEnabled?: boolean;
 }) {
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const productions = (order.productionOrderIds || [])
       .map((id: string) => state.productionOrders.find((item) => item.id === id))
       .filter(Boolean),
@@ -1120,6 +1141,12 @@ export function OrderDetailDialog({
             <Printer />
             Imprimir
           </Button>
+          {!["cancelado", "devolvido"].includes(order.status) && (
+            <Button variant="outline" type="button" onClick={() => setQuoteOpen(true)}>
+              <FileText />
+              Orçamento para o cliente
+            </Button>
+          )}
           {order.status === "orcamento" && (
             <Button variant="outline" type="button" onClick={onEdit}>
               <Pencil />
@@ -1137,6 +1164,15 @@ export function OrderDetailDialog({
             Fechar
           </Button>
         </DialogFooter>
+        <QuoteDialog
+          orderId={order.id}
+          state={state}
+          save={save}
+          saving={saving}
+          linkEnabled={linkEnabled}
+          open={quoteOpen}
+          onClose={() => setQuoteOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -1332,5 +1368,115 @@ export function OrderActions({ order, state, save, saving }: { order: Order; sta
         <SaveButton saving={saving}>{lossWarning ? "Confirmar prejuízo e concluir" : "Confirmar ação"}</SaveButton>
       </form>
     </details>
+  );
+}
+
+/** Orçamento para mandar ao cliente: texto para WhatsApp, impressão e link público revogável. */
+function QuoteDialog({
+  orderId,
+  state,
+  save,
+  saving,
+  linkEnabled,
+  open,
+  onClose,
+}: {
+  orderId: string;
+  state: AppState;
+  save: any;
+  saving: boolean;
+  linkEnabled: boolean;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const order = state.orders.find((o) => o.id === orderId),
+    quote = order && buildQuote(state, order),
+    sheet = useRef<HTMLDivElement>(null),
+    link = order?.quoteToken && typeof window !== "undefined" ? `${window.location.origin}/o/${order.quoteToken}` : "";
+  async function copy(text: string, done: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(done);
+    } catch {
+      toast.error("Não foi possível copiar automaticamente. Selecione o texto e copie.");
+    }
+  }
+  function print() {
+    const popup = window.open("", "_blank", "width=860,height=1000");
+    if (!popup || !sheet.current)
+      return toast.error("O navegador bloqueou a janela de impressão. Permita pop-ups para este site.");
+    const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')].map((node) => node.outerHTML).join("");
+    popup.document.write(
+      `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento ${quote?.number}</title>${styles}</head><body><main class="quote-page">${sheet.current.innerHTML}</main></body></html>`,
+    );
+    popup.document.close();
+    setTimeout(() => popup.print(), 600);
+  }
+  async function toggleLink(enabled: boolean) {
+    if (await save(setQuoteLink(state, orderId, enabled), enabled ? "quote-link-create" : "quote-link-revoke"))
+      toast.success(enabled ? "Link criado" : "Link desativado. Quem tinha o endereço não consegue mais abrir.");
+  }
+  return (
+    <Dialog
+      open={open && Boolean(quote)}
+      onOpenChange={(value) => {
+        if (!value) onClose();
+      }}
+    >
+      <DialogContent className="entity-dialog quote-dialog">
+        <DialogHeader>
+          <DialogTitle>Orçamento para o cliente</DialogTitle>
+          <DialogDescription>Mostra só preços, prazo e condições. Nome e contato da empresa vêm de Parâmetros.</DialogDescription>
+        </DialogHeader>
+        {quote && (
+          <>
+            <div className="quote-preview" ref={sheet}>
+              <QuoteView quote={quote} />
+            </div>
+            <div className="quote-actions">
+              <Button type="button" onClick={() => copy(quoteText(quote), "Texto copiado. Cole no WhatsApp ou no e-mail.")}>
+                <ClipboardList />
+                Copiar texto
+              </Button>
+              <Button type="button" variant="outline" onClick={print}>
+                <Printer />
+                Imprimir ou salvar PDF
+              </Button>
+            </div>
+            <div className="quote-link">
+              <b>Link para o cliente</b>
+              {!linkEnabled ? (
+                <small>
+                  O link público precisa do banco permanente (Turso). Enquanto os dados estiverem só no navegador, use Copiar
+                  texto ou Imprimir.
+                </small>
+              ) : order?.quoteToken ? (
+                <>
+                  <div className="quote-link-row">
+                    <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="Link do orçamento" />
+                    <Button type="button" variant="outline" onClick={() => copy(link, "Link copiado")}>
+                      Copiar link
+                    </Button>
+                  </div>
+                  <small>
+                    Qualquer pessoa com este link vê o orçamento, sem senha.{" "}
+                    <button type="button" className="link-button" disabled={saving} onClick={() => toggleLink(false)}>
+                      Desativar link
+                    </button>
+                  </small>
+                </>
+              ) : (
+                <>
+                  <small>Cria um endereço que o cliente abre no celular, sem senha. Você pode desativar quando quiser.</small>
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => toggleLink(true)}>
+                    Criar link
+                  </Button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

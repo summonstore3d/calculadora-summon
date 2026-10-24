@@ -16,6 +16,7 @@ import {
   Megaphone,
   Menu,
   Package,
+  PackageSearch,
   Printer,
   Search,
   Settings,
@@ -23,6 +24,7 @@ import {
   SlidersHorizontal,
   Users,
   WalletCards,
+  Wrench,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +37,7 @@ import { Dashboard } from "@/components/app/dashboard";
 import { FinancePage } from "@/components/app/finance";
 import { MachinesPage, ProductionPage, StockPage } from "@/components/app/production";
 import { MarketingPage, ReportsPage } from "@/components/app/reports";
-import { MaterialsPage, PurchasesPage } from "@/components/app/supplies";
+import { MaterialsPage, PurchasesPage, RestockPage, SuppliesPage } from "@/components/app/supplies";
 import { SettingsPage } from "@/components/app/settings";
 
 export const browserStateKey = "print3d-operation-state";
@@ -45,6 +47,7 @@ export const browserBackupKey = "print3d-operation-cloud-backup";
 export const hasOperationalData = (value: AppState) =>
   [
     "materials",
+    "supplies",
     "suppliers",
     "purchases",
     "products",
@@ -102,7 +105,9 @@ export const navigationModules = [
     defaultPage: "materials",
     items: [
       ["materials", "Materiais", Boxes],
+      ["supplies", "Outros insumos", Wrench],
       ["purchases", "Compras", ShoppingCart],
+      ["restock", "Reabastecimento", PackageSearch],
     ],
   },
   {
@@ -371,6 +376,10 @@ export function OperationsApp({
       <MaterialsPage state={state} save={save} saving={saving} initialMaterialRef={page === "materials" ? record : undefined} />
     ),
     purchases: <PurchasesPage state={state} save={save} saving={saving} />,
+    supplies: (
+      <SuppliesPage state={state} save={save} saving={saving} initialSupplyRef={page === "supplies" ? record : undefined} />
+    ),
+    restock: <RestockPage state={state} save={save} saving={saving} />,
     production: (
       <ProductionPage
         state={state}
@@ -398,6 +407,7 @@ export function OperationsApp({
         saving={saving}
         initialOrderRef={page === "orders" ? record : undefined}
         onOrderRefChange={(value) => navigateRecord("orders", value)}
+        linkEnabled={!localMode}
       />
     ),
     finance: <FinancePage state={state} save={save} saving={saving} />,

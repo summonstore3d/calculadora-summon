@@ -1,5 +1,36 @@
 # Mudanças
 
+## Fase 5 · Operação do dia a dia (24/10/2026)
+
+**Outros insumos** (Insumos → Outros insumos)
+- Cadastro de ímãs, parafusos, caixas, etiquetas e qualquer item comprado pronto, com unidade, estoque mínimo, fornecedor e local.
+- Entrada com custo médio (4 casas, para itens de centavos) e pagamento à vista, a prazo ou parcelado, como no filamento.
+- Ajuste de estoque por contagem, com motivo.
+- Na ficha técnica e na calculadora, "Componentes por peça" entra no custo e no preço. A reserva de falha não incide sobre eles.
+- Ao concluir a produção, os componentes das peças aprovadas saem do estoque (peças perdidas não recebem componente). Falta de componente impede concluir, como a falta de filamento.
+- O aviso de preço desatualizado também considera mudanças no custo dos componentes.
+
+**Reabastecimento** (Insumos → Reabastecimento)
+- Lista do que comprar: estoque mínimo + o que as ordens de produção abertas vão usar + consumo médio dos últimos 30 dias pelos dias de cobertura escolhidos (7 a 60) − estoque atual.
+- Agrupada por fornecedor, com urgência (falta para a produção, abaixo do mínimo, acaba em X dias), preço da última compra e custo estimado.
+- Quantidades editáveis, "Copiar lista" com texto pronto para o fornecedor e "Registrar compra" já preenchido.
+
+**Leitura do arquivo do fatiador** (calculadora e ficha técnica)
+- G-code de texto do PrusaSlicer, SuperSlicer, OrcaSlicer, Bambu Studio, Cura e Simplify3D; 3MF fatiado do Bambu Studio e OrcaSlicer, com escolha do prato.
+- Mostra o que encontrou (peso, tempo, filamentos) e só preenche ao clicar em Aplicar. Em várias cores, cria uma linha por filamento.
+- Arquivos grandes são lidos só no começo e no fim. G-code binário e 3MF sem fatiar recebem uma explicação de como exportar.
+
+**Orçamento para o cliente** (pedido → Orçamento para o cliente)
+- Dados da empresa, condições e validade em Parâmetros.
+- Pré-visualização com itens, descontos, frete, total, prazo de produção e validade, sem custo, margem ou lucro.
+- Copiar texto para WhatsApp, imprimir ou salvar em PDF, e link público (`/o/...`) que o cliente abre no celular sem senha; o link pode ser desativado a qualquer momento.
+
+**Banco**
+- Nova tabela `supplies` e índice; criadas sozinhas no primeiro acesso. A conferência do servidor passa a recusar estoque de insumo negativo.
+
+**Testes**
+- 17 testes novos (insumos, reabastecimento, fatiador, orçamento). Total: 71 testes de regra, mais o de persistência. Roteiro no navegador ampliado para 17 operações, todas passando.
+
 ## Fase 4 · Organizar o código (24/10/2026)
 
 Nada muda no uso do sistema, exceto os três ajustes visuais no fim desta lista. O objetivo é deixar as próximas mudanças mais seguras.

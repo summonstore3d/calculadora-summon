@@ -9,6 +9,7 @@ async function resolveProvider(provided?:DatabaseProvider){if(provided)return pr
 
 const descriptors:Descriptor[]=[
   {key:"materials",table:"materials",columns:["id","user_id","brand","type","color","stock_grams","average_cost","minimum_grams","status","snapshot"],values:r=>[r.id,"$USER",r.brand,r.type,r.color,r.stockGrams,r.averageCost,r.minimumGrams,r.status,json(r)]},
+  {key:"supplies",table:"supplies",columns:["id","user_id","name","stock","status","snapshot"],values:r=>[r.id,"$USER",r.name,r.stock,r.status,json(r)]},
   {key:"suppliers",table:"suppliers",columns:["id","user_id","name","contact","email","status","snapshot"],values:r=>[r.id,"$USER",r.name,r.contact||null,r.email||null,r.status,json(r)]},
   {key:"purchases",table:"purchase_records",columns:["id","user_id","material_id","supplier_id","weight_grams","total_cents","purchased_at","reversed_at","snapshot"],values:r=>[r.id,"$USER",r.materialId,r.supplierId||null,(Number(r.kg)||0)*1000,amount(r.total),r.date,r.reversedAt||null,json(r)]},
   {key:"products",table:"products",columns:["id","user_id","sku","name","category","universe","tags","ready_stock","status","snapshot"],values:r=>[r.id,"$USER",r.sku,r.name,r.category,r.universe||null,json(r.tags||[]),r.readyStock,r.status,json(r)]},

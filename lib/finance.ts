@@ -27,6 +27,7 @@ import {
 } from "./summon.ts";
 
 export const PURCHASE_CATEGORY = "Compra de filamento";
+export const SUPPLY_PURCHASE_CATEGORY = "Compra de insumos";
 export const MAINTENANCE_CATEGORY = "Manutenção de máquinas";
 export const EXPENSE_CATEGORIES = [
   "Aluguel",
@@ -232,43 +233,60 @@ export function payExpense(state: AppState, expenseId: string, input: { date: st
 export type PurchasePaymentPlan = { mode: "paid" | "due" | "installments"; dueDate?: string; installments?: number };
 
 /** Contas a pagar geradas por uma compra de filamento. */
-export function purchaseExpenses(purchase: Purchase, materialLabel: string, plan: PurchasePaymentPlan): Expense[] {
+/** Contas geradas por uma compra de estoque (filamento ou outros insumos): à vista, a prazo ou parcelada. */
+export function inventoryExpenses(
+  entry: { id: string; total: number; date: string; note: string },
+  description: string,
+  category: string,
+  sourceKind: "purchase" | "supply-purchase",
+  plan: PurchasePaymentPlan,
+): Expense[] {
   const createdAt = new Date().toISOString(),
-    base = `Compra ${materialLabel} (${String(purchase.kg).replace(".", ",")} kg)`,
-    source = { kind: "purchase" as const, id: purchase.id };
+    source = { kind: sourceKind, id: entry.id };
   if (plan.mode === "paid")
     return [
       {
         id: uid(),
-        description: base,
-        category: PURCHASE_CATEGORY,
-        amount: cents(purchase.total),
-        dueDate: purchase.date,
-        paidAt: purchase.date,
+        description,
+        category,
+        amount: cents(entry.total),
+        dueDate: entry.date,
+        paidAt: entry.date,
         recurring: false,
         status: "pago",
-        note: purchase.note,
+        note: entry.note,
         createdAt,
         source,
       },
     ];
   const count = plan.mode === "installments" ? Math.max(2, Math.trunc(plan.installments || 2)) : 1,
-    first = plan.dueDate || purchase.date,
+    first = plan.dueDate || entry.date,
     seriesId = uid();
-  return splitAmount(purchase.total, count).map((amount, index) => ({
+  return splitAmount(entry.total, count).map((amount, index) => ({
     id: uid(),
-    description: count > 1 ? `${base} (${index + 1}/${count})` : base,
-    category: PURCHASE_CATEGORY,
+    description: count > 1 ? `${description} (${index + 1}/${count})` : description,
+    category,
     amount,
     dueDate: addMonths(first, index),
     recurring: false,
     status: "pendente" as const,
-    note: purchase.note,
+    note: entry.note,
     createdAt,
     source,
     seriesId: count > 1 ? seriesId : undefined,
     installment: count > 1 ? { index: index + 1, total: count } : undefined,
   }));
+}
+
+/** Contas a pagar geradas por uma compra de filamento. */
+export function purchaseExpenses(purchase: Purchase, materialLabel: string, plan: PurchasePaymentPlan): Expense[] {
+  return inventoryExpenses(
+    purchase,
+    `Compra ${materialLabel} (${String(purchase.kg).replace(".", ",")} kg)`,
+    PURCHASE_CATEGORY,
+    "purchase",
+    plan,
+  );
 }
 
 export function maintenanceExpense(maintenance: Maintenance, machine?: Pick<Machine, "name">): Expense {
@@ -449,6 +467,7 @@ const excludedFromDre = (e: Expense) =>
   Boolean(e.source) ||
   normalize(e.category) === "impostos" ||
   normalize(e.category) === normalize(PURCHASE_CATEGORY) ||
+  normalize(e.category) === normalize(SUPPLY_PURCHASE_CATEGORY) ||
   normalize(e.category) === normalize(MAINTENANCE_CATEGORY);
 /** Se a despesa entra no resultado (DRE), no lucro do painel e nos relatórios, pela data de vencimento. */
 export const countsInResult = (e: Expense) => e.status !== "cancelado" && !excludedFromDre(e);

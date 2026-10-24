@@ -3,7 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
-import { Activity, AlertTriangle, ChevronRight, Factory, Layers3, Package, Pencil, Plus, Printer, Search, X } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ChevronRight,
+  Factory,
+  Layers3,
+  Package,
+  Pencil,
+  Plus,
+  Printer,
+  Search,
+  Upload,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +38,7 @@ import {
   CostSnapshot,
   MaterialPart,
   Product,
+  RecipeComponent,
   RecipeDraft,
   RecipeVersion,
   calculateCost,
@@ -44,6 +58,7 @@ import {
   uid,
   updateProduct,
 } from "@/lib/summon";
+import { readSlicerFile, type SliceInfo } from "@/lib/slicer";
 import {
   DataTable,
   Empty,
@@ -74,6 +89,7 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
     },
     [job, setJob] = useState(initialJob),
     [parts, setParts] = useState<MaterialPart[]>([{ materialId: "", name: "", weightGrams: 120, costPerKg: 0 }]),
+    [components, setComponents] = useState<RecipeComponent[]>([]),
     [draftReady, setDraftReady] = useState(false);
   useEffect(() => {
     try {
@@ -82,6 +98,7 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
         const draft = JSON.parse(raw);
         if (draft.job) setJob((current) => ({ ...current, ...draft.job }));
         if (Array.isArray(draft.parts) && draft.parts.length) setParts(draft.parts);
+        if (Array.isArray(draft.components)) setComponents(draft.components);
       }
     } catch {
     } finally {
@@ -89,9 +106,15 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
     }
   }, []);
   useEffect(() => {
-    if (draftReady) localStorage.setItem("calculator-live-draft", JSON.stringify({ job, parts }));
-  }, [draftReady, job, parts]);
-  const activeParts = parts
+    if (draftReady) localStorage.setItem("calculator-live-draft", JSON.stringify({ job, parts, components }));
+  }, [draftReady, job, parts, components]);
+  const activeComponents = components
+      .filter((c) => c.supplyId && c.quantity > 0)
+      .map((c) => {
+        const supply = state.supplies.find((x) => x.id === c.supplyId);
+        return supply ? { ...c, name: supply.name, unitCost: supply.averageCost } : c;
+      }),
+    activeParts = parts
       .filter((part) => part.materialId && part.weightGrams > 0)
       .map((part) => {
         const material = state.materials.find((item) => item.id === part.materialId);
@@ -106,12 +129,16 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
       other: Math.max(0, job.other),
       unitsPerPrint: Math.max(1, Math.trunc(job.units)),
       parts: activeParts,
+      componentsPerUnit: activeComponents.reduce((sum, c) => sum + c.quantity * c.unitCost, 0),
     },
     machine = state.machines.find((item) => item.id === job.machineId),
     jobSettings = { ...machineSettings(state.settings, machine), markup: job.markup },
-    snapshot = useMemo(() => calculateCost(input, jobSettings), [job, parts, state.settings, state.materials, state.machines]),
+    snapshot = useMemo(
+      () => calculateCost(input, jobSettings),
+      [job, parts, components, state.settings, state.materials, state.machines, state.supplies],
+    ),
     weightGrams = parts.reduce((total, part) => total + (Number(part.weightGrams) || 0), 0),
-    result = { name: job.name, sku: job.sku, machineId: machine?.id, input, snapshot, weightGrams },
+    result = { name: job.name, sku: job.sku, machineId: machine?.id, input, components: activeComponents, snapshot, weightGrams },
     costShare = snapshot.directPrice ? Math.min(100, (snapshot.unitCost / snapshot.directPrice) * 100) : 0,
     payback = snapshot.directProfit > 0 ? Math.ceil(jobSettings.machineValue / snapshot.directProfit) : 0;
   const presets = [
@@ -196,6 +223,7 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
   function reset() {
     setJob({ ...initialJob, markup: state.settings.markup });
     setParts([{ materialId: "", name: "", weightGrams: 120, costPerKg: 0 }]);
+    setComponents([]);
     localStorage.removeItem("calculator-live-draft");
   }
   return (
@@ -320,6 +348,13 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
                 </span>
                 <strong>{weightGrams.toFixed(1)} g</strong>
               </div>
+              <SlicerImport
+                state={state}
+                onApply={(info) => {
+                  if (info.seconds) setValue("hours", Math.round((info.seconds / 3600) * 100) / 100);
+                  setParts((current) => partsFromSlice(state, current, info));
+                }}
+              />
               <div className="parts">
                 {parts.map((part, index) => (
                   <div className="part-row" key={index}>
@@ -399,6 +434,9 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
                 <Plus />
                 Adicionar material ou cor
               </Button>
+            </div>
+            <div className="calculator-section">
+              <ComponentsEditor state={state} value={components} onChange={setComponents} />
             </div>
             <div className="calculator-section calculator-risk-grid">
               <label className="field">
@@ -524,6 +562,7 @@ export function CalculatorPage({ state, save, saving }: { state: AppState; save:
               ["Trabalho", snapshot.labor],
               ["Manutenção", snapshot.maintenance],
               ["Falhas", snapshot.failure],
+              ["Componentes", snapshot.components || 0],
               ["Outros", snapshot.other],
             ].map(([label, value]) => (
               <div key={label}>
@@ -594,6 +633,7 @@ export function ProductSave({
               finishingMinutes: result.input.finishingMinutes || 0,
               otherCost: result.input.other,
               machineId: result.machineId,
+              components: result.components?.length ? result.components : undefined,
               unitsPerPrint: result.input.unitsPerPrint,
               snapshot: result.snapshot,
               createdAt,
@@ -1164,6 +1204,22 @@ export function ProductDetailPanel({
                       </div>
                     );
                   })}
+                  {(recipe.components || []).map((c) => {
+                    const supply = state.supplies.find((x) => x.id === c.supplyId);
+                    return (
+                      <div key={`c-${c.supplyId}`}>
+                        <span>
+                          <b>{supply?.name || c.name}</b>
+                          <small>
+                            Componente por peça · {money(supply?.averageCost ?? c.unitCost)}/{supply?.unit || "un"}
+                          </small>
+                        </span>
+                        <strong>
+                          {String(c.quantity).replace(".", ",")} {supply?.unit || "un"}
+                        </strong>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="cost-breakdown compact">
                   <b>Composição do custo</b>
@@ -1187,6 +1243,12 @@ export function ProductDetailPanel({
                     <span>Falhas</span>
                     <strong>{money(product.snapshot.failure)}</strong>
                   </div>
+                  {(product.snapshot.components || 0) > 0 && (
+                    <div>
+                      <span>Componentes</span>
+                      <strong>{money(product.snapshot.components || 0)}</strong>
+                    </div>
+                  )}
                   <div>
                     <span>Outros</span>
                     <strong>{money(product.snapshot.other + product.snapshot.maintenance)}</strong>
@@ -1369,6 +1431,19 @@ export function RecipeEditorDialog({
                 </span>
                 <strong>{draft.parts.reduce((total, part) => total + (Number(part.weightGrams) || 0), 0).toFixed(1)} g</strong>
               </div>
+              <SlicerImport
+                state={state}
+                onApply={(info) => {
+                  setDraft(
+                    (current) =>
+                      current && {
+                        ...current,
+                        parts: partsFromSlice(state, current.parts, info),
+                        printHours: info.seconds ? Math.round((info.seconds / 3600) * 100) / 100 : current.printHours,
+                      },
+                  );
+                }}
+              />
               {draft.parts.map((part, index) => (
                 <div className="part-row" key={index}>
                   <label className="field">
@@ -1429,6 +1504,7 @@ export function RecipeEditorDialog({
                 Adicionar material ou cor
               </Button>
             </div>
+            <ComponentsEditor state={state} value={draft.components || []} onChange={(next) => set("components", next)} />
             <div className="form-grid cols-3">
               {num("unitsPerPrint", "Unidades por impressão", "1")}
               {num("printHours", "Tempo de impressão (h)", ".1")}
@@ -1619,5 +1695,187 @@ export function LabelButton({ entity, id, title }: { entity: string; id: string;
         </div>
       )}
     </details>
+  );
+}
+
+/** Componentes comprados prontos usados em cada peça (ímã, parafuso, caixa). */
+export function ComponentsEditor({
+  state,
+  value,
+  onChange,
+}: {
+  state: AppState;
+  value: RecipeComponent[];
+  onChange: (next: RecipeComponent[]) => void;
+}) {
+  const supplies = (state.supplies || []).filter((x) => x.status === "active" || value.some((c) => c.supplyId === x.id)),
+    perUnit = value.reduce(
+      (sum, c) => sum + c.quantity * (supplies.find((x) => x.id === c.supplyId)?.averageCost ?? c.unitCost),
+      0,
+    ),
+    update = (index: number, patch: Partial<RecipeComponent>) =>
+      onChange(value.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  return (
+    <div className="components-editor">
+      <div className="calculator-section-head">
+        <span>
+          <b>Componentes por peça</b>
+          <small>Ímãs, parafusos, caixas e etiquetas. Cadastre em Insumos → Outros insumos.</small>
+        </span>
+        {value.length > 0 && <strong>{money(perUnit)}/peça</strong>}
+      </div>
+      {value.map((c, index) => {
+        const supply = supplies.find((x) => x.id === c.supplyId);
+        return (
+          <div className="part-row" key={index}>
+            <label className="field">
+              <span>Componente</span>
+              <select
+                value={c.supplyId}
+                onChange={(event) => {
+                  const x = supplies.find((y) => y.id === event.target.value);
+                  update(index, { supplyId: event.target.value, name: x?.name || "", unitCost: x?.averageCost || 0 });
+                }}
+              >
+                <option value="">Selecione</option>
+                {supplies.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name} · {money(x.averageCost)}/{x.unit} · {x.stock} em estoque
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Qtd. por peça{supply ? ` (${supply.unit})` : ""}</span>
+              <Input
+                type="number"
+                min="0"
+                step=".01"
+                value={c.quantity}
+                onChange={(event) => update(index, { quantity: Math.max(0, Number(event.target.value) || 0) })}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="Remover componente"
+              onClick={() => onChange(value.filter((_, i) => i !== index))}
+            >
+              <X />
+            </Button>
+          </div>
+        );
+      })}
+      {supplies.length ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onChange([...value, { supplyId: "", name: "", quantity: 1, unitCost: 0 }])}
+        >
+          <Plus />
+          Adicionar componente
+        </Button>
+      ) : (
+        <small className="muted">Nenhum insumo cadastrado ainda.</small>
+      )}
+    </div>
+  );
+}
+
+/** Coloca os pesos lidos do fatiador nas linhas de material, mantendo os materiais já escolhidos. */
+function partsFromSlice(state: AppState, current: MaterialPart[], info: SliceInfo): MaterialPart[] {
+  const filaments = info.filaments.length ? info.filaments : [{ grams: info.totalGrams }];
+  return filaments.map((f, i) => {
+    const existing = current[i];
+    const sameType = state.materials.filter((m) => m.status === "active" && f.type && normalize(m.type) === normalize(f.type));
+    const match = existing?.materialId ? undefined : sameType.length === 1 ? sameType[0] : undefined;
+    return {
+      materialId: existing?.materialId || match?.id || "",
+      name: existing?.name || (match ? `${match.type} ${match.color}` : f.type || ""),
+      costPerKg: existing?.costPerKg || match?.averageCost || 0,
+      weightGrams: Math.round((f.grams ?? (i === 0 ? info.totalGrams || 0 : 0)) * 10) / 10,
+    };
+  });
+}
+
+const durationLabel = (seconds?: number) =>
+  seconds ? `${Math.floor(seconds / 3600)}h${String(Math.round((seconds % 3600) / 60)).padStart(2, "0")}` : "—";
+
+/** Botão que lê G-code ou 3MF fatiado e mostra o que encontrou antes de aplicar. */
+export function SlicerImport({ state, onApply }: { state: AppState; onApply: (info: SliceInfo) => void }) {
+  const [plates, setPlates] = useState<SliceInfo[] | null>(null),
+    [selected, setSelected] = useState(0),
+    [reading, setReading] = useState(false),
+    info = plates?.[selected];
+  async function read(file?: File) {
+    if (!file) return;
+    setReading(true);
+    try {
+      const result = await readSlicerFile(file);
+      setPlates(result);
+      setSelected(0);
+    } catch (error: any) {
+      toast.error(error.message || "Não foi possível ler o arquivo");
+    } finally {
+      setReading(false);
+    }
+  }
+  return (
+    <div className="slicer-import">
+      {!info ? (
+        <label className="slicer-import-button">
+          <Upload />
+          <span>{reading ? "Lendo arquivo…" : "Ler peso e tempo do arquivo do fatiador"}</span>
+          <small>G-code (PrusaSlicer, Orca, Bambu Studio, Cura) ou 3MF fatiado</small>
+          <input
+            type="file"
+            accept=".gcode,.gco,.g,.3mf,.bgcode"
+            disabled={reading}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              read(file);
+            }}
+          />
+        </label>
+      ) : (
+        <div className="slicer-result" role="status">
+          <div>
+            <b>{info.source}</b>
+            {plates!.length > 1 && (
+              <select value={selected} onChange={(event) => setSelected(Number(event.target.value))} aria-label="Prato">
+                {plates!.map((p, i) => (
+                  <option key={i} value={i}>
+                    Prato {p.plate ?? i + 1}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <span>
+            {info.totalGrams ? `${String(info.totalGrams).replace(".", ",")} g` : "peso não informado"} ·{" "}
+            {durationLabel(info.seconds)}
+            {info.filaments.length > 1 &&
+              ` · ${info.filaments.map((f) => `${f.type || "filamento"} ${String(f.grams ?? 0).replace(".", ",")} g`).join(" + ")}`}
+          </span>
+          <div className="slicer-result-actions">
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                onApply(info);
+                setPlates(null);
+                toast.success("Peso e tempo preenchidos. Confira os materiais de cada linha.");
+              }}
+            >
+              Aplicar
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setPlates(null)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

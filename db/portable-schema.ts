@@ -4,6 +4,7 @@ export const portableSchema = [
   "CREATE TABLE IF NOT EXISTS user_profiles (user_id TEXT PRIMARY KEY NOT NULL, version INTEGER NOT NULL DEFAULT 0, settings TEXT NOT NULL, write_token TEXT NOT NULL, legacy_migrated_at TEXT, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS materials (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, brand TEXT NOT NULL, type TEXT NOT NULL, color TEXT NOT NULL, stock_grams REAL NOT NULL DEFAULT 0, average_cost REAL NOT NULL DEFAULT 0, minimum_grams REAL NOT NULL DEFAULT 250, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL DEFAULT '{}')",
+  "CREATE TABLE IF NOT EXISTS supplies (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, stock REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS suppliers (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, contact TEXT, email TEXT, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL DEFAULT '{}')",
   "CREATE TABLE IF NOT EXISTS purchase_records (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, material_id TEXT NOT NULL, supplier_id TEXT, weight_grams REAL NOT NULL, total_cents INTEGER NOT NULL, purchased_at TEXT NOT NULL, reversed_at TEXT, snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, universe TEXT, tags TEXT NOT NULL DEFAULT '[]', ready_stock INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL)",
@@ -44,4 +45,5 @@ export const portableSchema = [
   "CREATE INDEX IF NOT EXISTS idx_payments_user ON payments (user_id)",
   "CREATE INDEX IF NOT EXISTS idx_goals_user ON goals (user_id)",
   "CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_supplies_user ON supplies (user_id)",
 ];
