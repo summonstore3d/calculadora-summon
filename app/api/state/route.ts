@@ -1,9 +1,9 @@
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getCurrentUser } from "@/app/auth";
 import { emptyState,hydrateState } from "@/lib/summon";
 import {loadOperationalState,saveOperationalState} from "@/db/state-repository";
 
 export const dynamic="force-dynamic";
-async function user(){const value=await getChatGPTUser();if(!value)throw new Error("UNAUTHORIZED");return value}
+async function user(){const value=await getCurrentUser();if(!value)throw new Error("UNAUTHORIZED");return value}
 function assertState(value:any,previous:any,action?:string){
   if(!value||typeof value!=="object")throw new Error("Estado inválido");
   for(const key of ["materials","products","orders","productionOrders","lots","movements","payments","expenses"]){if(!Array.isArray(value[key]))throw new Error(`Coleção inválida: ${key}`);const ids=new Set<string>();for(const row of value[key]){if(!row?.id||ids.has(row.id))throw new Error(`ID inválido ou duplicado em ${key}`);ids.add(row.id)}}

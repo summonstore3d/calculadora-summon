@@ -15,7 +15,7 @@
 
 # next.js
 /.next/
-/.vinext/
+
 /out/
 
 # misc
@@ -37,9 +37,9 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
-/dist/
-/.wrangler/
-/.sites-runtime/
+
+
+
 /.agents/
 /.codex/
 /outputs/

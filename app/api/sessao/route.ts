@@ -19,7 +19,6 @@ export async function POST(request: Request) {
   const returnTo = safeReturnPath(String(form.get("return_to") || "/"));
   const back = (code: string) => `/entrar?erro=${code}&return_to=${encodeURIComponent(returnTo)}`;
 
-  if (!process.env.VERCEL) return redirectTo(request, "/");
   if (!passwordAuthConfigured()) return redirectTo(request, back("config"));
 
   if (!(await passwordMatches(String(form.get("senha") || "")))) {

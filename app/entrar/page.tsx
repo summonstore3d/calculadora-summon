@@ -2,14 +2,14 @@ import { redirect } from "next/navigation";
 import { Layers3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getCurrentUser } from "@/app/auth";
 import { passwordAuthConfigured, safeReturnPath } from "@/app/password-auth";
 
 export const dynamic = "force-dynamic";
 
 const errors: Record<string, string> = {
   senha: "Senha incorreta. Confira e tente de novo.",
-  config: "O acesso ainda não foi configurado. Cadastre APP_PASSWORD nas variáveis de ambiente da Vercel e faça um novo deploy.",
+  config: "O acesso ainda não foi configurado. Cadastre APP_PASSWORD nas variáveis de ambiente (na Vercel ou no arquivo .env.local) e reinicie.",
 };
 
 export default async function SignInPage({
@@ -20,9 +20,7 @@ export default async function SignInPage({
   const { erro, return_to } = await searchParams;
   const returnTo = safeReturnPath(return_to);
 
-  // Fora da Vercel o login é do ChatGPT Sites; esta página não se aplica.
-  if (!process.env.VERCEL) redirect(returnTo);
-  if (await getChatGPTUser()) redirect(returnTo);
+  if (await getCurrentUser()) redirect(returnTo);
 
   const configured = passwordAuthConfigured();
   const message = !configured ? errors.config : erro ? errors[erro] : undefined;

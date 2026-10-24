@@ -1,24 +1,50 @@
-import {env} from "cloudflare:workers";
-import {createClient,type Client,type InValue} from "@libsql/client/web";
-import {portableSchema} from "./portable-schema";
+import { createClient, type Client, type InValue } from "@libsql/client/web";
+import { portableSchema } from "./portable-schema";
 
-export type SqlStatement={sql:string;args?:unknown[]};
-export type SqlRow=Record<string,unknown>;
-export type DatabaseProvider={kind:"d1"|"libsql";all<T extends SqlRow=SqlRow>(sql:string,args?:unknown[]):Promise<T[]>;first<T extends SqlRow=SqlRow>(sql:string,args?:unknown[]):Promise<T|undefined>;batch(statements:SqlStatement[]):Promise<void>};
+export type SqlStatement = { sql: string; args?: unknown[] };
+export type SqlRow = Record<string, unknown>;
+export type DatabaseProvider = {
+  kind: "libsql";
+  all<T extends SqlRow = SqlRow>(sql: string, args?: unknown[]): Promise<T[]>;
+  first<T extends SqlRow = SqlRow>(sql: string, args?: unknown[]): Promise<T | undefined>;
+  batch(statements: SqlStatement[]): Promise<void>;
+};
 
-let libsqlClient:Client|undefined;
-let libsqlReady:Promise<void>|undefined;
+let client: Client | undefined;
+let ready: Promise<void> | undefined;
 
-function libsqlProvider(url:string,authToken:string):DatabaseProvider{
-  libsqlClient ||= createClient({url,authToken});
-  libsqlReady ||= (async()=>{for(const sql of portableSchema)await libsqlClient!.execute(sql)})();
-  const ready=()=>libsqlReady!;
-  return{kind:"libsql",async all<T extends SqlRow>(sql:string,args:unknown[]=[]){await ready();const result=await libsqlClient!.execute({sql,args:args as InValue[]});return result.rows.map(row=>Object.fromEntries(Object.entries(row))) as T[]},async first<T extends SqlRow>(sql:string,args:unknown[]=[]){await ready();const result=await libsqlClient!.execute({sql,args:args as InValue[]}),row=result.rows[0];return row?Object.fromEntries(Object.entries(row)) as T:undefined},async batch(statements:SqlStatement[]){if(!statements.length)return;await ready();await libsqlClient!.batch(statements.map(statement=>({sql:statement.sql,args:(statement.args||[]) as InValue[]})),"write")}};
+function prepare() {
+  // Cria tabelas e índices que faltarem. Se falhar (rede, token), tenta de novo na próxima chamada
+  // em vez de deixar o servidor preso no erro até reiniciar.
+  ready ||= (async () => {
+    for (const sql of portableSchema) await client!.execute(sql);
+  })().catch((error) => {
+    ready = undefined;
+    throw error;
+  });
+  return ready;
 }
 
-export function getDatabaseProvider():DatabaseProvider|undefined{
-  if(env.DB){const db=env.DB;return{kind:"d1",async all<T extends SqlRow>(sql:string,args:unknown[]=[]){const result=await db.prepare(sql).bind(...args).all<T>();return(result.results||[]) as T[]},async first<T extends SqlRow>(sql:string,args:unknown[]=[]){return(await db.prepare(sql).bind(...args).first<T>())||undefined},async batch(statements:SqlStatement[]){if(!statements.length)return;await db.batch(statements.map(statement=>db.prepare(statement.sql).bind(...(statement.args||[]))))}}}
-  const url=process.env.TURSO_DATABASE_URL,token=process.env.TURSO_AUTH_TOKEN;
-  if(url&&token)return libsqlProvider(url,token);
-  return undefined;
+/** Banco Turso (libSQL). Sem TURSO_DATABASE_URL e TURSO_AUTH_TOKEN, o sistema funciona só no navegador. */
+export function getDatabaseProvider(): DatabaseProvider | undefined {
+  const url = process.env.TURSO_DATABASE_URL, authToken = process.env.TURSO_AUTH_TOKEN;
+  if (!url || !authToken) return undefined;
+  client ||= createClient({ url, authToken });
+  const rows = (result: { rows: unknown[] }) => result.rows.map((row) => Object.fromEntries(Object.entries(row as object)));
+  return {
+    kind: "libsql",
+    async all<T extends SqlRow>(sql: string, args: unknown[] = []) {
+      await prepare();
+      return rows(await client!.execute({ sql, args: args as InValue[] })) as T[];
+    },
+    async first<T extends SqlRow>(sql: string, args: unknown[] = []) {
+      await prepare();
+      return rows(await client!.execute({ sql, args: args as InValue[] }))[0] as T | undefined;
+    },
+    async batch(statements: SqlStatement[]) {
+      if (!statements.length) return;
+      await prepare();
+      await client!.batch(statements.map((statement) => ({ sql: statement.sql, args: (statement.args || []) as InValue[] })), "write");
+    },
+  };
 }

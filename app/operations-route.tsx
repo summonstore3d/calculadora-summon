@@ -1,8 +1,8 @@
-import {requireChatGPTUser,chatGPTSignOutPath} from "./chatgpt-auth";
-import {OperationsApp} from "@/components/summon-app";
-import {PageId} from "@/lib/navigation";
+import { requireUser } from "./auth";
+import { OperationsApp } from "@/components/summon-app";
+import type { PageId } from "@/lib/navigation";
 
-export async function OperationsRoute({initialPage="dashboard",initialRecord,returnPath="/"}:{initialPage?:PageId;initialRecord?:string;returnPath?:string}){
-  const user=await requireChatGPTUser(returnPath);
-  return <OperationsApp user={user.displayName} signOut={process.env.VERCEL?"/api/sessao/sair":chatGPTSignOutPath(returnPath)} initialPage={initialPage} initialRecord={initialRecord}/>;
+export async function OperationsRoute({ initialPage = "dashboard", initialRecord, returnPath = "/" }: { initialPage?: PageId; initialRecord?: string; returnPath?: string }) {
+  const user = await requireUser(returnPath);
+  return <OperationsApp user={user.displayName} signOut="/api/sessao/sair" initialPage={initialPage} initialRecord={initialRecord} />;
 }

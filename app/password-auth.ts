@@ -1,7 +1,6 @@
-// Acesso por senha para a hospedagem na Vercel, onde não existem os cabeçalhos
-// de login do ChatGPT Sites. Sem APP_PASSWORD configurada, ninguém entra.
+// Acesso ao sistema por senha. Sem APP_PASSWORD configurada, ninguém entra.
 //
-// Variáveis de ambiente (Vercel → Settings → Environment Variables):
+// Variáveis de ambiente (Vercel → Settings → Environment Variables, ou .env.local no computador):
 //   APP_PASSWORD        senha de acesso (obrigatória)
 //   APP_SESSION_SECRET  chave para assinar a sessão (opcional; se ausente, usa a senha,
 //                       e trocar a senha encerra todas as sessões abertas)
