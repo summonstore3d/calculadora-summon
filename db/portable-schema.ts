@@ -1,10 +1,10 @@
-// Used only by the Vercel/libSQL adapter. D1 schema changes remain owned by
-// the versioned Drizzle migrations in /drizzle.
+// Tabelas e índices do banco Turso. Executado a cada início do servidor; IF NOT EXISTS torna seguro repetir.
 export const portableSchema = [
   "CREATE TABLE IF NOT EXISTS app_states (user_id TEXT PRIMARY KEY NOT NULL, version INTEGER NOT NULL DEFAULT 1, payload TEXT NOT NULL, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS user_profiles (user_id TEXT PRIMARY KEY NOT NULL, version INTEGER NOT NULL DEFAULT 0, settings TEXT NOT NULL, write_token TEXT NOT NULL, legacy_migrated_at TEXT, updated_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS materials (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, brand TEXT NOT NULL, type TEXT NOT NULL, color TEXT NOT NULL, stock_grams REAL NOT NULL DEFAULT 0, average_cost REAL NOT NULL DEFAULT 0, minimum_grams REAL NOT NULL DEFAULT 250, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL DEFAULT '{}')",
+  "CREATE TABLE IF NOT EXISTS supplies (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, stock REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS suppliers (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, contact TEXT, email TEXT, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL DEFAULT '{}')",
   "CREATE TABLE IF NOT EXISTS purchase_records (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, material_id TEXT NOT NULL, supplier_id TEXT, weight_grams REAL NOT NULL, total_cents INTEGER NOT NULL, purchased_at TEXT NOT NULL, reversed_at TEXT, snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, sku TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, universe TEXT, tags TEXT NOT NULL DEFAULT '[]', ready_stock INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', snapshot TEXT NOT NULL)",
@@ -23,6 +23,9 @@ export const portableSchema = [
   "CREATE TABLE IF NOT EXISTS goals (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, month TEXT NOT NULL, snapshot TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL, amount_cents INTEGER NOT NULL, due_date TEXT NOT NULL, paid_at TEXT, status TEXT NOT NULL, recurring INTEGER NOT NULL DEFAULT 0, snapshot TEXT NOT NULL, created_at TEXT NOT NULL)",
   "CREATE TABLE IF NOT EXISTS calculations (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)",
+  // Fotos de produto em base64; o produto guarda só /api/imagens/<id>.
+  "CREATE TABLE IF NOT EXISTS images (id TEXT PRIMARY KEY NOT NULL, user_id TEXT NOT NULL, content_type TEXT NOT NULL, bytes INTEGER NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS idx_images_user_created ON images (user_id, created_at)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_products_user_sku ON products (user_id, sku)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_recipe_product_version ON recipe_versions (product_id, version)",
   "CREATE INDEX IF NOT EXISTS idx_orders_user_status_created ON orders (user_id, status, created_at)",
@@ -30,4 +33,20 @@ export const portableSchema = [
   "CREATE INDEX IF NOT EXISTS idx_order_items_user_order ON order_items (user_id, order_id)",
   "CREATE INDEX IF NOT EXISTS idx_recipe_components_recipe ON recipe_components (user_id, recipe_version_id)",
   "CREATE INDEX IF NOT EXISTS idx_calculations_user_created ON calculations (user_id, created_at)",
+  // Toda leitura filtra pelo dono; sem estes índices o banco percorre a tabela inteira.
+  "CREATE INDEX IF NOT EXISTS idx_audit_events_user ON audit_events (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_materials_user ON materials (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_suppliers_user ON suppliers (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_purchase_records_user ON purchase_records (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_recipe_versions_user ON recipe_versions (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_machines_user ON machines (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_maintenances_user ON maintenances (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_production_orders_user ON production_orders (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_product_lots_user ON product_lots (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_customers_user ON customers (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_campaigns_user ON campaigns (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_payments_user ON payments (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_goals_user ON goals (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_expenses_user ON expenses (user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_supplies_user ON supplies (user_id)",
 ];

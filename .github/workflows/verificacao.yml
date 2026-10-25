@@ -1,0 +1,32 @@
+# Confere tipos e testes a cada envio. O build da Vercel ignora erros de tipo
+# (typescript.ignoreBuildErrors), então é aqui que eles aparecem antes de chegar ao ar.
+name: Verificação
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificacao-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+      - name: Conferir tipos
+        run: pnpm typecheck
+      - name: Rodar testes
+        run: pnpm test

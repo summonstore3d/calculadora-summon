@@ -9,6 +9,7 @@ async function resolveProvider(provided?:DatabaseProvider){if(provided)return pr
 
 const descriptors:Descriptor[]=[
   {key:"materials",table:"materials",columns:["id","user_id","brand","type","color","stock_grams","average_cost","minimum_grams","status","snapshot"],values:r=>[r.id,"$USER",r.brand,r.type,r.color,r.stockGrams,r.averageCost,r.minimumGrams,r.status,json(r)]},
+  {key:"supplies",table:"supplies",columns:["id","user_id","name","stock","status","snapshot"],values:r=>[r.id,"$USER",r.name,r.stock,r.status,json(r)]},
   {key:"suppliers",table:"suppliers",columns:["id","user_id","name","contact","email","status","snapshot"],values:r=>[r.id,"$USER",r.name,r.contact||null,r.email||null,r.status,json(r)]},
   {key:"purchases",table:"purchase_records",columns:["id","user_id","material_id","supplier_id","weight_grams","total_cents","purchased_at","reversed_at","snapshot"],values:r=>[r.id,"$USER",r.materialId,r.supplierId||null,(Number(r.kg)||0)*1000,amount(r.total),r.date,r.reversedAt||null,json(r)]},
   {key:"products",table:"products",columns:["id","user_id","sku","name","category","universe","tags","ready_stock","status","snapshot"],values:r=>[r.id,"$USER",r.sku,r.name,r.category,r.universe||null,json(r.tags||[]),r.readyStock,r.status,json(r)]},
@@ -26,6 +27,15 @@ const descriptors:Descriptor[]=[
   {key:"goals",table:"goals",columns:["id","user_id","month","snapshot"],values:r=>[r.id,"$USER",r.month,json(r)]},
   {key:"calculations",table:"calculations",columns:["id","user_id","name","created_at","snapshot"],values:r=>[r.id,"$USER",r.name,r.createdAt,json(r)]},
 ];
+
+// Antes de uma importação de backup, guarda o estado anterior na auditoria para
+// permitir a recuperação. Acima do limite, registra só as contagens (limite de linha do D1).
+const PREVIOUS_STATE_LIMIT=900_000;
+export function auditPayload(action:string,version:number,previous:AppState){
+  if(action!=="backup-import")return json({version});
+  const snapshot=json(previous),counts=Object.fromEntries(descriptors.map(d=>[d.key,(previous[d.key] as any[]).length]));
+  return snapshot.length<=PREVIOUS_STATE_LIMIT?json({version,counts,previousState:previous}):json({version,counts,previousStateOmitted:snapshot.length});
+}
 
 type ProfileRow={version:number;settings:string;write_token:string};
 const parseSnapshot=(value:unknown)=>{try{return JSON.parse(String(value||"{}"))}catch{return null}};
@@ -92,7 +102,7 @@ export async function saveOperationalState(userId:string,nextState:AppState,expe
   const now=new Date().toISOString(),token=crypto.randomUUID(),nextVersion=expectedVersion+1,statements:SqlStatement[]=[{sql:"UPDATE user_profiles SET version=?,settings=?,write_token=?,updated_at=? WHERE user_id=? AND version=?",args:[nextVersion,json(nextState.settings),token,now,userId,expectedVersion]}];
   for(const descriptor of descriptors){const before=current.state[descriptor.key] as any[],after=nextState[descriptor.key] as any[];for(const row of changedRows(before,after))statements.push(guardedUpsert(descriptor,row,userId,token));for(const row of removedRows(before,after))statements.push(guardedDelete(descriptor.table,row.id,userId,token))}
   if(json(current.state.orders)!==json(nextState.orders)||json(current.state.recipes)!==json(nextState.recipes))statements.push(...derivedStatements(current.state,nextState,userId,token));
-  statements.push({sql:"INSERT INTO audit_events (id,user_id,entity_type,entity_id,action,payload,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM user_profiles WHERE user_id=? AND write_token=?)",args:[crypto.randomUUID(),userId,entityType,entityId,action,json({version:nextVersion}),now,userId,token]});
+  statements.push({sql:"INSERT INTO audit_events (id,user_id,entity_type,entity_id,action,payload,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM user_profiles WHERE user_id=? AND write_token=?)",args:[crypto.randomUUID(),userId,entityType,entityId,action,auditPayload(action,nextVersion,current.state),now,userId,token]});
   await db.batch(statements);
   const committed=await db.first<ProfileRow>("SELECT version, settings, write_token FROM user_profiles WHERE user_id = ?",[userId]);
   if(committed?.write_token!==token)return{conflict:true,...(await loadOperationalState(userId,db))!};

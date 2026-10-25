@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm run build:vercel",
-  "framework": "nextjs"
+  "buildCommand": "pnpm run build",
+  "framework": "nextjs",
+  "crons": [{ "path": "/api/resumo", "schedule": "0 10 * * *" }]
 }
