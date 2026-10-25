@@ -8,7 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AppState, cents, localMonth, money, today, uid } from "@/lib/summon";
-import { countsInResult } from "@/lib/finance";
+import { countsInResult, financeMonths, monthLabel } from "@/lib/finance";
+import { cashSheet, dreSheet, expensesSheet, salesSheet, stockSheet, type Sheet } from "@/lib/export";
 import {
   DataTable,
   Empty,
@@ -194,6 +195,7 @@ export function ReportsPage({ state }: { state: AppState }) {
           tone={netProfit >= 0 ? "green" : "red"}
         />
       </div>
+      <AccountantExport state={state} />
       <Section title="Rentabilidade por produto">
         {byProduct.size ? (
           <DataTable headers={["Produto", "Vendidas", "Receita", "Lucro", "Margem"]}>
@@ -216,5 +218,55 @@ export function ReportsPage({ state }: { state: AppState }) {
         )}
       </Section>
     </>
+  );
+}
+
+/** Planilhas do mês para o contador ou para conferir no Excel. */
+function AccountantExport({ state }: { state: AppState }) {
+  const months = financeMonths(state),
+    current = localMonth(today()),
+    // A lista inclui meses futuros (parcelas e recorrências); começa pelo mês atual.
+    [month, setMonth] = useState(months.includes(current) ? current : months[0]);
+  const sheets: [string, string, () => Sheet][] = [
+    ["Vendas", "Uma linha por item vendido, com receita, taxas, custo e lucro", () => salesSheet(state, month)],
+    ["Resultado (DRE)", "Receita, deduções, despesas e lucro do mês", () => dreSheet(state, month)],
+    ["Contas a pagar", "Todas as contas com vencimento no mês, pagas ou não", () => expensesSheet(state, month)],
+    ["Extrato do caixa", "Tudo que entrou e saiu de fato no mês", () => cashSheet(state, month)],
+    ["Estoque valorizado", "Filamento, insumos e peças prontas hoje, ao custo", () => stockSheet(state)],
+  ];
+  return (
+    <Section title="Planilhas para o contador" description="Abrem direto no Excel, Google Sheets ou LibreOffice.">
+      <div className="export-month">
+        <label>
+          <span>Mês</span>
+          <select value={month} onChange={(e) => setMonth(e.target.value)}>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="export-grid">
+        {sheets.map(([title, detail, build]) => (
+          <button
+            key={title}
+            onClick={() => {
+              const sheet = build();
+              if (sheet.rows.length <= 1)
+                return toast.info(`Nada em ${title.toLowerCase()} para ${monthLabel(month).toLowerCase()}.`);
+              downloadCsv(sheet.filename, sheet.rows);
+            }}
+          >
+            <Download />
+            <span>
+              <b>{title}</b>
+              <small>{detail}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+    </Section>
   );
 }

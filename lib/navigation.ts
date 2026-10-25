@@ -10,6 +10,7 @@ export const pageRoutes = {
   materials: "/materiais",
   supplies: "/insumos",
   restock: "/reabastecimento",
+  inventory: "/inventario",
   purchases: "/compras",
   finance: "/financeiro",
   marketing: "/marketing",
@@ -31,6 +32,7 @@ export const pageTitles: Record<PageId, string> = {
   materials: "Materiais",
   supplies: "Outros insumos",
   restock: "Reabastecimento",
+  inventory: "Inventário",
   purchases: "Compras",
   finance: "Financeiro",
   marketing: "Marketing",
@@ -38,9 +40,7 @@ export const pageTitles: Record<PageId, string> = {
   settings: "Parâmetros",
 };
 
-const routePages = new Map<string,PageId>(
-  Object.entries(pageRoutes).map(([page, path]) => [path, page as PageId]),
-);
+const routePages = new Map<string, PageId>(Object.entries(pageRoutes).map(([page, path]) => [path, page as PageId]));
 
 export function pageFromPath(pathname: string): PageId | undefined {
   const normalized = `/${pathname.split("?")[0].split("#")[0].split("/").filter(Boolean)[0] || ""}`;
@@ -56,7 +56,7 @@ export function pathForRecord(page: string, record: string): string {
 }
 
 export function recordFromPath(pathname: string): string | undefined {
-  const segments=pathname.split("?")[0].split("#")[0].split("/").filter(Boolean);
+  const segments = pathname.split("?")[0].split("#")[0].split("/").filter(Boolean);
   return segments[1] ? decodeURIComponent(segments[1]) : undefined;
 }
 

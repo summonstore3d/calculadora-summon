@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { AppState, Product } from "@/lib/summon";
+import { toCsv, type Cell } from "@/lib/export";
 
 export const n = (f: FormData, k: string) => Number(f.get(k)) || 0;
 
@@ -246,12 +247,9 @@ export function Section({ title, description, children }: { title: string; descr
   );
 }
 
-export const csvCell = (value: string | number) =>
-  typeof value === "number" ? value.toFixed(2).replace(".", ",") : `"${String(value ?? "").replaceAll('"', '""')}"`;
-
 /** CSV que o Excel em português abre certo: marca UTF-8, ponto e vírgula e vírgula decimal. */
-export function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const blob = new Blob(["﻿" + rows.map((row) => row.map(csvCell).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" }),
+export function downloadCsv(filename: string, rows: Cell[][]) {
+  const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" }),
     a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;

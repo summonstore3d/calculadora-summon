@@ -11,8 +11,56 @@ import { AppState, financialBreakdown, localDay, localMonth, money, normalize, t
 import { PageId } from "@/lib/navigation";
 import { buildDashboardAnalytics } from "@/lib/dashboard";
 import { monthLabel, monthlyDre } from "@/lib/finance";
+import { dailySummary, type DailyItem } from "@/lib/daily";
 import { Empty, PageHead, Section, Stat, dateLabel, statusLabel } from "@/components/app/shared";
 import { FinancialTraceDialog } from "@/components/app/sales";
+
+/** O que pede atenção hoje, do mais urgente ao informativo. Cada linha abre o registro ou a tela certa. */
+export function DailySummaryPanel({
+  summary,
+  navigate,
+  navigateRecord,
+}: {
+  summary: { items: DailyItem[]; urgent: number };
+  navigate: (page: any) => void;
+  navigateRecord: (page: any, record?: string) => void;
+}) {
+  return (
+    <section className="daily-summary" aria-labelledby="daily-summary-title">
+      <div className="daily-summary-head">
+        <span>
+          <b id="daily-summary-title">Resumo do dia</b>
+          <small>
+            {summary.items.length ? "Do mais urgente ao informativo. Toque para abrir." : "Nada pedindo atenção hoje."}
+          </small>
+        </span>
+        <Badge variant={summary.urgent ? "destructive" : "secondary"}>
+          {summary.urgent ? `${summary.urgent} urgente${summary.urgent === 1 ? "" : "s"}` : "Tudo em dia"}
+        </Badge>
+      </div>
+      {summary.items.length > 0 && (
+        <ul className="daily-summary-list">
+          {summary.items.map((item) => (
+            <li key={item.key}>
+              <button
+                className={`daily-${item.tone}`}
+                onClick={() => (item.record ? navigateRecord(item.page, item.record) : navigate(item.page))}
+              >
+                <i aria-hidden="true" />
+                <span>
+                  <b>{item.title}</b>
+                  <small>{item.detail}</small>
+                </span>
+                {item.amount ? <strong>{money(item.amount)}</strong> : <strong />}
+                <ChevronRight />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 /** Metas do mês (cadastradas em Parâmetros) contra o realizado. */
 export function GoalsPanel({ state, navigate }: { state: AppState; navigate: (page: string) => void }) {
@@ -175,66 +223,7 @@ export function Dashboard({
       financialBreakdown(order).anomalies.map((message) => ({ order, message })),
     ),
     detailContent = dashboardDetail(detail, analytics, state);
-  const waitingPayment = state.orders.filter(
-      (order) => !["orcamento", "concluido", "cancelado", "devolvido"].includes(order.status) && order.paymentStatus !== "pago",
-    ),
-    waitingAction = state.orders.filter((order) => ["aprovado", "pronto"].includes(order.status)),
-    overduePayments = state.payments.filter(
-      (payment) => !["pago", "estornado"].includes(payment.status) && payment.dueDate < today(),
-    ),
-    maintenanceAttention = activeMachines.filter((machine) => {
-      if (machine.status === "maintenance") return true;
-      if (!machine.lastMaintenance) return machine.accumulatedHours > 0;
-      const last = new Date(machine.lastMaintenance + "T12:00:00").getTime();
-      return Date.now() - last > 1000 * 60 * 60 * 24 * 90;
-    });
-  const pendingGroups = [
-    {
-      id: "orders",
-      title: "Pedidos sem avanço",
-      count: waitingAction.length,
-      detail: waitingAction.length ? `${waitingAction[0].number} · ${waitingAction[0].customerName}` : "Nenhum pedido parado",
-      tone: "blue",
-      action: () => (waitingAction[0] ? navigateRecord("orders", waitingAction[0].number) : navigate("orders")),
-    },
-    {
-      id: "payment",
-      title: "Aguardando pagamento",
-      count: waitingPayment.length,
-      detail: overduePayments.length ? `${overduePayments.length} cobrança(s) vencida(s)` : "Sem cobranças vencidas",
-      tone: overduePayments.length ? "red" : "neutral",
-      action: () => (waitingPayment[0] ? navigateRecord("orders", waitingPayment[0].number) : navigate("orders")),
-    },
-    {
-      id: "overdue",
-      title: "Produções atrasadas",
-      count: overdue.length,
-      detail: overdue.length ? `${overdue[0].number} · prazo ${dateLabel(overdue[0].dueDate)}` : "Nenhum prazo vencido",
-      tone: overdue.length ? "red" : "neutral",
-      action: () => (overdue[0] ? navigateRecord("production", overdue[0].number) : navigate("production")),
-    },
-    {
-      id: "materials",
-      title: "Falta de material",
-      count: blocked.length,
-      detail: blocked.length ? `${blocked[0].number} bloqueada` : "Fila abastecida",
-      tone: blocked.length ? "amber" : "neutral",
-      action: () => {
-        const part = blocked[0]?.plannedConsumption.find(
-          (item) => (state.materials.find((material) => material.id === item.materialId)?.stockGrams || 0) < item.weightGrams,
-        );
-        part ? navigateRecord("materials", `entrada:${part.materialId}`) : navigate("materials");
-      },
-    },
-    {
-      id: "maintenance",
-      title: "Manutenção a verificar",
-      count: maintenanceAttention.length,
-      detail: maintenanceAttention.length ? maintenanceAttention[0].name : "Máquinas em dia",
-      tone: maintenanceAttention.length ? "amber" : "neutral",
-      action: () => navigate("machines"),
-    },
-  ];
+  const summary = dailySummary(state);
   return (
     <>
       <PageHead
@@ -365,29 +354,7 @@ export function Dashboard({
         </button>
       </div>
       <GoalsPanel state={state} navigate={navigate} />
-      <section className="today-pending" aria-labelledby="today-pending-title">
-        <div className="today-pending-head">
-          <span>
-            <b id="today-pending-title">Pendências de hoje</b>
-            <small>Abra diretamente o registro que precisa de atenção.</small>
-          </span>
-          <Badge variant={pendingGroups.some((item) => item.count) ? "destructive" : "secondary"}>
-            {pendingGroups.reduce((total, item) => total + item.count, 0)} pendências
-          </Badge>
-        </div>
-        <div className="today-pending-grid">
-          {pendingGroups.map((item) => (
-            <button key={item.id} className={`pending-${item.tone}`} onClick={item.action}>
-              <span>
-                <b>{item.title}</b>
-                <small>{item.detail}</small>
-              </span>
-              <strong>{item.count}</strong>
-              <ChevronRight />
-            </button>
-          ))}
-        </div>
-      </section>
+      <DailySummaryPanel summary={summary} navigate={navigate} navigateRecord={navigateRecord} />
       <div className="farm-dashboard-grid">
         <Section
           title="Máquinas agora"

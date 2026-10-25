@@ -1,5 +1,25 @@
 # Mudanças
 
+## Fase 7 · Rotina mais leve (24/10/2026)
+
+**Resumo do dia** (painel)
+- Substitui "Pendências de hoje": uma lista em ordem de urgência com contas atrasadas, de hoje e dos próximos 3 dias; recebimentos atrasados; filamento e insumos abaixo do mínimo; peças prontas abaixo do mínimo; pedidos parados há mais de 5 dias (enviados, 10); produção atrasada ou sem filamento; máquinas pedindo manutenção; orçamentos vencendo ou vencidos.
+- Cada linha mostra o total em reais quando faz sentido e abre a tela ou o pedido certo.
+- Opcional: o mesmo resumo por e-mail toda manhã (Resend + agendamento da Vercel), só quando há algo pedindo atenção.
+
+**Inventário** (Insumos → Inventário)
+- Contagem de filamento (em gramas), outros insumos e peças prontas, com busca, filtros e o botão ✓ para "confere com o sistema".
+- Mostra a diferença de cada item e o total de faltas e sobras em reais. A contagem fica salva no navegador até ser aplicada.
+- Ao aplicar: falta de peça sai dos lotes mais antigos; sobra vira um lote de ajuste (AJ-...) ao custo médio atual. Toda correção fica nas movimentações com o motivo.
+- "Baixar folha de contagem" gera a lista para contar no papel ou na planilha.
+
+**Planilhas para o contador** (Gestão → Relatórios)
+- Vendas (uma linha por item), resultado do mês (DRE), contas a pagar, extrato do caixa e estoque valorizado, em CSV que o Excel em português abre direto.
+- Texto que começa com =, +, - ou @ é protegido para o Excel não executar como fórmula.
+
+**Instalar no celular**
+- Manifest, ícones e metadados para "Adicionar à tela inicial" no Android e no iPhone, com atalhos para Pedidos, Calculadora e Inventário.
+
 ## Fase 6 · Proteger o que já existe (24/10/2026)
 
 **Fotos fora dos dados principais**

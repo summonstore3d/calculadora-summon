@@ -17,6 +17,7 @@ import {
   Menu,
   Package,
   PackageSearch,
+  ClipboardCheck,
   Printer,
   Search,
   Settings,
@@ -39,6 +40,7 @@ import { MachinesPage, ProductionPage, StockPage } from "@/components/app/produc
 import { MarketingPage, ReportsPage } from "@/components/app/reports";
 import { MaterialsPage, PurchasesPage, RestockPage, SuppliesPage } from "@/components/app/supplies";
 import { SettingsPage } from "@/components/app/settings";
+import { InventoryPage } from "@/components/app/inventory";
 
 export const browserStateKey = "print3d-operation-state";
 
@@ -108,6 +110,7 @@ export const navigationModules = [
       ["supplies", "Outros insumos", Wrench],
       ["purchases", "Compras", ShoppingCart],
       ["restock", "Reabastecimento", PackageSearch],
+      ["inventory", "Inventário", ClipboardCheck],
     ],
   },
   {
@@ -383,6 +386,7 @@ export function OperationsApp({
       <SuppliesPage state={state} save={save} saving={saving} initialSupplyRef={page === "supplies" ? record : undefined} />
     ),
     restock: <RestockPage state={state} save={save} saving={saving} />,
+    inventory: <InventoryPage state={state} save={save} saving={saving} />,
     production: (
       <ProductionPage
         state={state}

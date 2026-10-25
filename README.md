@@ -10,7 +10,9 @@ Sistema para quem vende peças impressas em 3D: calcula custo e preço, controla
 - **Produção:** kanban de ordens. Ao concluir, baixa o filamento e os componentes e cria um lote de peças com o custo real.
 - **Vendas:** pedidos do orçamento à entrega, com separação de estoque por lote (o mais antigo primeiro), devolução e clientes. Orçamento para o cliente em texto (WhatsApp), impressão ou link público revogável.
 - **Financeiro:** contas a pagar (com recorrência e parcelas), contas a receber (com recebimento parcial e repasse de marketplace), extrato de caixa e resultado do mês (DRE).
-- **Painel e relatórios:** vendas, lucro, metas do mês, curva ABC, cobertura de estoque e necessidade de compra.
+- **Painel e relatórios:** resumo do dia (contas, recebimentos, estoque mínimo, pedidos parados, orçamentos), vendas, lucro, metas do mês, curva ABC e planilhas do mês para o contador.
+- **Inventário:** contagem física de filamento, insumos e peças prontas, com as diferenças em reais, aplicada de uma vez.
+- **No celular:** pode ser instalado na tela inicial e abre como aplicativo.
 
 ## Rodar no computador
 
@@ -37,6 +39,22 @@ Abra http://localhost:3000 e entre com a senha definida em `APP_PASSWORD`. Sem a
 5. Em **Configurações → Parâmetros**, informe o saldo inicial do caixa, revise taxas, imposto e prazos de repasse, e preencha os dados da empresa que aparecem no orçamento.
 
 Se você já usava o sistema só no navegador, o primeiro acesso com o banco vazio transfere esses dados para o banco automaticamente.
+
+## Resumo do dia por e-mail (opcional)
+
+O resumo aparece no painel sempre. Para recebê-lo também por e-mail, toda manhã entre 7h e 8h:
+
+1. Crie uma conta gratuita no [Resend](https://resend.com) e gere uma chave de API.
+2. Na Vercel, cadastre `RESEND_API_KEY` (a chave), `RESUMO_EMAIL_PARA` (o e-mail da sua conta do Resend) e `CRON_SECRET` (um texto aleatório de pelo menos 16 caracteres), e faça um novo deploy.
+
+Sem domínio próprio verificado no Resend, o envio só chega ao e-mail da sua conta do Resend, o que basta para você receber o próprio resumo. Para mandar para outros endereços, verifique um domínio no Resend e cadastre `RESUMO_EMAIL_DE` (ex.: `Oficina 3D <resumo@seudominio.com.br>`). O agendamento está em `vercel.json`; o e-mail só sai quando há algo pedindo atenção.
+
+## Instalar no celular
+
+- **iPhone (Safari):** botão Compartilhar → Adicionar à Tela de Início.
+- **Android (Chrome):** menu ⋮ → Instalar app (ou Adicionar à tela inicial).
+
+O sistema abre em tela cheia, com ícone próprio e atalhos para Pedidos, Calculadora e Inventário. Ele continua precisando de internet: os dados ficam no banco, não no aparelho.
 
 ## Fotos dos produtos
 
@@ -76,11 +94,15 @@ O build da Vercel não para por erro de tipo (`typescript.ignoreBuildErrors` em 
 | `lib/restock.ts` | Lista de reabastecimento |
 | `lib/slicer.ts` | Leitura de G-code e 3MF fatiado |
 | `lib/quote.ts` | Orçamento para o cliente |
+| `lib/daily.ts` | Resumo do dia (painel e e-mail) |
+| `lib/inventory.ts` | Inventário: diferenças e correção do estoque |
+| `lib/export.ts` | Planilhas para o contador (CSV para Excel) |
 | `lib/images.ts` | Fotos dos produtos: validação, separação dos dados e volta para o backup |
 | `components/summon-app.tsx` | Estrutura do app: menu, carregamento e gravação dos dados |
 | `components/app/*.tsx` | Uma pasta por área: `dashboard`, `sales`, `products`, `production`, `supplies`, `finance`, `reports`, `settings` e `shared` (campos, tabelas e cartões comuns) |
 | `app/api/state` | API que lê e grava os dados no Turso |
 | `app/api/imagens` | Envio e entrega das fotos dos produtos |
+| `app/api/resumo` | E-mail da manhã, chamado pelo agendamento da Vercel |
 | `app/api/backup` | Backup completo, para o botão de exportar e para a cópia semanal |
 | `app/entrar`, `app/api/sessao` | Login por senha |
 | `app/o/[token]` | Página pública do orçamento (sem senha, só com o link; some quando o link é desativado) |
